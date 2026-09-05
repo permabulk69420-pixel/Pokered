@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#152f30" />
+    <meta name="description" content="A small, walkable Pallet Town. A personal Pokémon Red VR remaster study for Meta Quest." />
+    <title>Pallet Town · Pokémon Red VR</title>
+  </head>
+  <body>
+    <canvas id="world" aria-label="Pallet Town 3D scene"></canvas>
+    <div id="vignette" aria-hidden="true"></div>
+    <header id="topbar">
+      <div class="location"><span class="ball-mark" aria-hidden="true"></span><span>KANTO <span class="divider">/</span> PALLET TOWN</span></div>
+      <div class="top-actions"><span id="build-label">VISUAL STUDY 01</span><button id="menu-button" hidden>Menu</button></div>
+    </header>
+    <main id="intro">
+      <div class="eyebrow">POKÉMON RED <span>•</span> A VR REMASTER STUDY</div>
+      <h1>Pallet Town<span class="title-period">.</span></h1>
+      <p class="subtitle">Shades of your journey await.</p>
+      <div class="actions"><button id="walk-button" class="primary" disabled>Preparing town…</button><button id="vr-button" disabled>Checking VR…</button></div>
+      <p id="controls-intro">WASD to walk · Mouse to look · Open in Quest Browser for VR</p>
+    </main>
+    <div id="walk-hud" hidden><span class="crosshair" aria-hidden="true"></span><p id="walk-help">WASD · Walk <span>SHIFT · Jog</span><span>ESC · Menu</span></p></div>
+    <div id="touch-controls" hidden><div id="joystick" aria-label="Drag to walk"><span id="stick"></span></div><span id="touch-look-hint">Drag the right side to look</span></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <footer id="footer"><span>PALLET TOWN ONLY <span class="divider">/</span> EXPLORATION BUILD</span><span id="footer-right">A quiet beginning.</span></footer>
+    <details id="debug" hidden><summary>Scene statistics</summary><pre id="stats"></pre></details>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
