@@ -254,9 +254,11 @@ function makeAnimeLedgeGeometry(width,seed){
     ];
   };
   for(let i=0;i<=steps;i++)for(const p of section(i))bodyPos.push(...p);
+  // Winding matters here: +Z is the south/Pallet side of each ledge. The
+  // previous order pointed the south face northward, so Three.js culled it.
   for(let i=0;i<steps;i++){
     const a=i*6,b=(i+1)*6;
-    for(const [p0,p1] of [[0,1],[1,2],[3,4],[4,5]])bodyIdx.push(a+p0,b+p0,a+p1,a+p1,b+p0,b+p1);
+    for(const [p0,p1] of [[0,1],[1,2],[3,4],[4,5]])bodyIdx.push(a+p0,a+p1,b+p0,a+p1,b+p1,b+p0);
   }
   bodyIdx.push(0,1,2,0,2,3,0,3,4,0,4,5);
   const e=steps*6;bodyIdx.push(e,e+2,e+1,e,e+3,e+2,e,e+4,e+3,e,e+5,e+4);
@@ -267,7 +269,8 @@ function makeAnimeLedgeGeometry(width,seed){
     const x=xs[i],h=heights[i]+.018;
     capPos.push(x,h,backs[i]-.035,x,h,fronts[i]+.015);
   }
-  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;capIdx.push(a,b,a+1,a+1,b,b+1);}
+  // Grass cap now winds upward (+Y), not down into the terrain.
+  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;capIdx.push(a,a+1,b,a+1,b+1,b);}
   const cap=new THREE.BufferGeometry();cap.setAttribute('position',new THREE.Float32BufferAttribute(capPos,3));cap.setIndex(capIdx);cap.computeVertexNormals();
 
   const rimPos=[],rimIdx=[];
@@ -275,7 +278,8 @@ function makeAnimeLedgeGeometry(width,seed){
     const x=xs[i],h=heights[i],fz=fronts[i];
     rimPos.push(x,h+.015,fz+.018,x,h*.82,fz+.105);
   }
-  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;rimIdx.push(a,b,a+1,a+1,b,b+1);}
+  // The green lip is part of the south-facing silhouette too.
+  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;rimIdx.push(a,a+1,b,a+1,b+1,b);}
   const rim=new THREE.BufferGeometry();rim.setAttribute('position',new THREE.Float32BufferAttribute(rimPos,3));rim.setIndex(rimIdx);rim.computeVertexNormals();
 
   return {body,cap,rim};
