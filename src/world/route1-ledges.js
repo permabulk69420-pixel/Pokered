@@ -169,7 +169,6 @@ function makeLedgeGeometry(width,seed){
       p0[0],p0[1]-.075,p0[2]+.012, p1[0],p1[1]-.075,p1[2]+.012, ...p1,
     );
 
-    // Grass breaks over the soil in irregular scallops and tongues instead of ending on a straight seam.
     const style=edgeRand();
     if(style>.16){
       const top0=[p0[0],p0[1]+.004,p0[2]+.010],top1=[p1[0],p1[1]+.004,p1[2]+.010];
@@ -188,7 +187,6 @@ function makeLedgeGeometry(width,seed){
     }
   }
 
-  // Close the physical ends. The former strip was genuinely open, which is why it vanished from side-on views.
   for(const [row,reverse] of [[rows[0],false],[rows[rows.length-1],true]]){
     const base=[row[0][0],.018,row[6][2]];
     pushCapFan(turfEndPos,turfEndUv,[row[0],row[1],row[2],row[3],row[4],row[5],row[6],base],reverse);
@@ -213,6 +211,15 @@ function makeLedgeGeometry(width,seed){
   addTriangleColors(earthEnds,['#ffffff','#eee7dc','#e5dccf'],seed+1901);
 
   return {turf,earth,shadow,creep,turfEnds,earthEnds,rows};
+}
+
+function sampleTurfSurface(rows,localX,shoulder){
+  const minX=rows[0][0][0],maxX=rows[rows.length-1][0][0];
+  const along=THREE.MathUtils.clamp((localX-minX)/(maxX-minX),0,1)*(rows.length-1);
+  const i0=Math.floor(along),i1=Math.min(rows.length-1,i0+1),f=along-i0;
+  const crest=mixPoint(rows[i0][4],rows[i1][4],f);
+  const rear=mixPoint(rows[i0][3],rows[i1][3],f);
+  return mixPoint(crest,rear,shoulder);
 }
 
 function makeTuftGeometry(seed){
@@ -267,9 +274,13 @@ function buildLedges(root,mats){
     const count=Math.max(5,Math.floor(width/.42));
     for(let i=0;i<count;i++){
       const t=(i+.35+rand()*.30)/count,localX=-width/2+t*width+(rand()-.5)*.12;
-      const ri=Math.min(geo.rows.length-1,Math.max(0,Math.round(t*(geo.rows.length-1)))),crest=geo.rows[ri][4];
+      const anchor=sampleTurfSurface(geo.rows,localX,.10+rand()*.24);
       const target=rand()>.72?lightSets:sets,variant=Math.floor(rand()*3);
-      target[variant].push({position:[x+localX,crest[1]-.005,z+crest[2]-.06+(rand()-.5)*.06],rotation:[0,rand()*Math.PI*2,0],scale:[.82+rand()*.28,.78+rand()*.38,.82+rand()*.28]});
+      target[variant].push({
+        position:[x+anchor[0],anchor[1]-.025,z+anchor[2]],
+        rotation:[0,rand()*Math.PI*2,0],
+        scale:[.82+rand()*.28,.78+rand()*.38,.82+rand()*.28],
+      });
     }
     tuftGeos.forEach((g,i)=>{
       if(sets[i].length)group.add(instanceSet(g,tuftMat,sets[i],`route-1-ledge-tufts-${index}-${i}`,false));
