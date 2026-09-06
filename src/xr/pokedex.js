@@ -6,6 +6,7 @@ const GRAB_ON=.45;
 const GRAB_OFF=.22;
 const HELD_GRIP_AMOUNT=.30;
 const HELD_GRIP_TARGET=Object.freeze([0,-.035,-.115]);
+const HELD_GRIP_LOCAL_Y=-.035;
 const SCREEN_ASPECT=320/256;
 const HOME_ITEMS=Object.freeze(['DEX','CAMERA','SETTINGS']);
 const CAMERA_FOV_VALUES=Object.freeze([45,55,65]);
@@ -49,6 +50,9 @@ export async function setupPokedex({renderer,rig,states}) {
   const previewTarget=new THREE.WebGLRenderTarget(320,256,{depthBuffer:true});
   const photoTarget=new THREE.WebGLRenderTarget(320,256,{depthBuffer:true});
   for(const target of [previewTarget,photoTarget]){
+    // Render-target UVs have the opposite vertical origin from the glTF screen.
+    // Flip only the camera textures; the CanvasTexture above is already correct.
+    target.texture.wrapT=THREE.RepeatWrapping;target.texture.repeat.y=-1;target.texture.offset.y=1;
     target.texture.colorSpace=THREE.SRGBColorSpace;target.texture.minFilter=THREE.LinearFilter;target.texture.magFilter=THREE.LinearFilter;target.texture.generateMipmaps=false;
   }
   const cameraView=new THREE.PerspectiveCamera(55,SCREEN_ASPECT,.03,80);
@@ -66,7 +70,7 @@ export async function setupPokedex({renderer,rig,states}) {
   const dex=new Map();
   let carry='holstered',heldState=null,screenMode='home',homeIndex=0,dexIndex=0,settingsRow=0;
   let cameraFov=55,previewFps=18,previewAccumulator=1,photoHold=0,photoCount=0;
-  let lastPrimary=false,lastStickClick=false,lastRightTrigger=false,stickLatchX=0,stickLatchY=0,hovered=null;
+  let lastPrimary=false,lastBack=false,lastStickClick=false,lastRightTrigger=false,stickLatchX=0,stickLatchY=0,hovered=null;
 
   function getState(hand){return states.find(state=>state.handedness===hand&&state.inputSource)||null;}
   function setScreenMap(texture){if(screenMaterial.map===texture)return;screenMaterial.map=texture;screenMaterial.needsUpdate=true;}
@@ -76,7 +80,7 @@ export async function setupPokedex({renderer,rig,states}) {
     ctx.fillStyle='#9ff4ba';ctx.font='700 35px monospace';ctx.fillText(text,28,47);
     ctx.fillStyle='#347d54';ctx.fillRect(28,61,456,3);
   }
-  function footer(text='STICK MOVE · TRIGGER OK · CLICK BACK'){
+  function footer(text='STICK MOVE · TRIGGER OK · Y BACK'){
     ctx.fillStyle='#8ca99a';ctx.font='17px monospace';ctx.fillText(text,28,378);
   }
   function drawHome(){
@@ -102,14 +106,14 @@ export async function setupPokedex({renderer,rig,states}) {
         ctx.fillText(`${selected?'>':' '} ${number} ${state} ${entry.seen?entry.name.toUpperCase():'--------'}`,34,y);
       }
     }
-    footer('STICK SCROLL · CLICK BACK');uiTexture.needsUpdate=true;setScreenMap(uiTexture);
+    footer('STICK SCROLL · Y BACK');uiTexture.needsUpdate=true;setScreenMap(uiTexture);
   }
   function drawSettings(){
     title('SETTINGS');
     const rows=[`CAMERA FOV     ${cameraFov}°`,`CAMERA PREVIEW ${previewFps} FPS`];
     rows.forEach((row,index)=>{ctx.fillStyle=index===settingsRow?'#9ff4ba':'#b7c5bc';ctx.font=index===settingsRow?'700 23px monospace':'21px monospace';ctx.fillText(`${index===settingsRow?'>':' '} ${row}`,35,135+index*61);});
     ctx.fillStyle='#82988b';ctx.font='17px monospace';ctx.fillText('Camera rendering only runs while Camera mode is open.',35,290);
-    footer('UP/DOWN SELECT · LEFT/RIGHT CHANGE · CLICK BACK');uiTexture.needsUpdate=true;setScreenMap(uiTexture);
+    footer('UP/DOWN SELECT · LEFT/RIGHT CHANGE · Y BACK');uiTexture.needsUpdate=true;setScreenMap(uiTexture);
   }
   function drawUI(){if(screenMode==='home')drawHome();else if(screenMode==='dex')drawDex();else if(screenMode==='settings')drawSettings();}
 
@@ -131,11 +135,11 @@ export async function setupPokedex({renderer,rig,states}) {
   function holdDevice(state){
     clearHeldPose();carry='held';heldState=state;state.poseOverride={name:'Grip',amount:HELD_GRIP_AMOUNT};
     const handSpace=state.anchor||state.grip;handSpace.attach(device);
-    // Rotate the face clockwise in the user's view, then use the model's named
-    // grip geometry to re-seat it in the same hand target after that rotation.
+    // Rotate the face clockwise in the user's view, then align a point lower on
+    // the modeled grip rail so the hand sits below the screen instead of over it.
     device.position.set(0,0,0);device.rotation.set(0,0,-Math.PI/2);device.scale.setScalar(1);device.updateMatrixWorld(true);
     if(gripMarker){
-      gripMarker.getWorldPosition(tmp);handSpace.worldToLocal(tmp);device.position.add(targetGrip.clone().sub(tmp));
+      tmp.set(0,HELD_GRIP_LOCAL_Y,0);gripMarker.localToWorld(tmp);handSpace.worldToLocal(tmp);device.position.add(targetGrip.clone().sub(tmp));
     }else device.position.set(.065,-.025,-.11);
     setMode('home');
   }
@@ -197,9 +201,10 @@ export async function setupPokedex({renderer,rig,states}) {
 
   function updateLeftInput(){
     const gamepad=heldState?.inputSource?.gamepad;if(!gamepad)return;
-    const trigger=(gamepad.buttons?.[0]?.value??0)>.55,stickClick=!!gamepad.buttons?.[2]?.pressed,{x,y}=getAxes(gamepad);
-    if(trigger&&!lastPrimary)confirm();if(stickClick&&!lastStickClick&&screenMode!=='home')setMode('home');
-    lastPrimary=trigger;lastStickClick=stickClick;
+    const trigger=(gamepad.buttons?.[0]?.value??0)>.55,back=!!gamepad.buttons?.[5]?.pressed,stickClick=!!gamepad.buttons?.[2]?.pressed,{x,y}=getAxes(gamepad);
+    if(trigger&&!lastPrimary)confirm();
+    if((back&&!lastBack||stickClick&&!lastStickClick)&&screenMode!=='home')setMode('home');
+    lastPrimary=trigger;lastBack=back;lastStickClick=stickClick;
 
     if(Math.abs(y)<.35)stickLatchY=0;else if(!stickLatchY&&Math.abs(y)>.68){moveSelection(y>0?1:-1);stickLatchY=y>0?1:-1;}
     if(Math.abs(x)<.35)stickLatchX=0;else if(!stickLatchX&&Math.abs(x)>.68){adjustSetting(x>0?1:-1);stickLatchX=x>0?1:-1;}
@@ -220,7 +225,7 @@ export async function setupPokedex({renderer,rig,states}) {
     previewAccumulator+=dt;
     if(previewAccumulator>=1/previewFps){previewAccumulator=0;renderThroughLens(previewTarget);setScreenMap(previewTarget.texture);}
   }
-  function resetInput(){lastPrimary=false;lastStickClick=false;lastRightTrigger=false;stickLatchX=0;stickLatchY=0;}
+  function resetInput(){lastPrimary=false;lastBack=false;lastStickClick=false;lastRightTrigger=false;stickLatchX=0;stickLatchY=0;}
   function reset(){resetInput();holsterDevice();}
 
   function update(dt){
