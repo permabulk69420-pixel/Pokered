@@ -6,8 +6,10 @@ const GRAB_RADIUS=.22;
 const HOLSTER_RELEASE_RADIUS=.24;
 const GRAB_ON=.45;
 const GRAB_OFF=.22;
-const HELD_GRIP_AMOUNT=.32;
-const HELD_OFFSET=Object.freeze([0,-.012,-.088]);
+const HELD_GRIP_AMOUNT=.16;
+// Hand assets are authored with fingers along -Z and the palm facing -Y.
+// Put the 10 cm ball just off the palm surface, centred beneath the fingers.
+const HELD_HAND_OFFSET=Object.freeze([0,-.055,-.105]);
 
 export async function setupPokeball({renderer,rig,states}) {
   const scene=rig.parent;
@@ -87,11 +89,21 @@ export async function setupPokeball({renderer,rig,states}) {
     mode='held';heldState=state;velocity.set(0,0,0);spin.set(0,0,0);
     closeBall();
     state.poseOverride={name:'Grip',amount:HELD_GRIP_AMOUNT};
-    state.grip.attach(ball);
-    // Keep the sphere outside the palm: its near surface sits at the fingers/palm
-    // instead of burying the centre of the ball inside the hand mesh.
-    ball.position.fromArray(HELD_OFFSET);
-    ball.rotation.set(0,0,0);
+
+    // Use the hand model's calibrated anchor, not raw controller grip space.
+    // That makes the ball/palm relationship stable from every viewing angle.
+    const handSpace=state.anchor||state.grip;
+    handSpace.attach(ball);
+    if(state.anchor){
+      ball.position.fromArray(HELD_HAND_OFFSET);
+      // The hand anchor already includes the per-hand +/-90 degree calibration,
+      // which also leaves the Poké Ball's equator in a natural orientation.
+      ball.rotation.set(0,0,0);
+    }else{
+      // Very brief fallback while a hand GLB is still loading.
+      ball.position.set(0,-.012,-.088);
+      ball.rotation.set(0,0,0);
+    }
     ball.scale.setScalar(1);
   }
 
