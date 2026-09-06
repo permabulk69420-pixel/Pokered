@@ -39,6 +39,9 @@ export async function setupPokedex({renderer,rig,states}) {
   const uiCanvas=document.createElement('canvas');uiCanvas.width=512;uiCanvas.height=400;
   const ctx=uiCanvas.getContext('2d');
   const uiTexture=new THREE.CanvasTexture(uiCanvas);
+  // The Screen UVs are authored in glTF orientation. CanvasTexture defaults to
+  // flipY=true, which inverted the menu vertically on the physical device.
+  uiTexture.flipY=false;
   uiTexture.colorSpace=THREE.SRGBColorSpace;uiTexture.minFilter=THREE.LinearFilter;uiTexture.magFilter=THREE.LinearFilter;uiTexture.generateMipmaps=false;
   const screenMaterial=new THREE.MeshBasicMaterial({map:uiTexture,toneMapped:false});
   screenMaterial.name='PokedexDynamicScreen';screen.material=screenMaterial;
@@ -128,7 +131,9 @@ export async function setupPokedex({renderer,rig,states}) {
   function holdDevice(state){
     clearHeldPose();carry='held';heldState=state;state.poseOverride={name:'Grip',amount:HELD_GRIP_AMOUNT};
     const handSpace=state.anchor||state.grip;handSpace.attach(device);
-    device.position.set(0,0,0);device.rotation.set(0,0,0);device.scale.setScalar(1);device.updateMatrixWorld(true);
+    // Rotate the face clockwise in the user's view, then use the model's named
+    // grip geometry to re-seat it in the same hand target after that rotation.
+    device.position.set(0,0,0);device.rotation.set(0,0,-Math.PI/2);device.scale.setScalar(1);device.updateMatrixWorld(true);
     if(gripMarker){
       gripMarker.getWorldPosition(tmp);handSpace.worldToLocal(tmp);device.position.add(targetGrip.clone().sub(tmp));
     }else device.position.set(.065,-.025,-.11);
