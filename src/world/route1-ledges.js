@@ -38,31 +38,23 @@ function makeEarthTextures(){
   const color=document.createElement('canvas'),bump=document.createElement('canvas');
   color.width=color.height=bump.width=bump.height=512;
   const c=color.getContext('2d'),b=bump.getContext('2d'),rand=seededRandom(8021);
-
-  // Muted warm soil, deliberately close to Pallet's tan/olive palette rather than red clay.
   c.fillStyle='#b79a6d';c.fillRect(0,0,512,512);
   b.fillStyle='rgb(128,128,128)';b.fillRect(0,0,512,512);
 
-  // Large soft variation prevents the bank reading as a flat coloured strip.
   for(let i=0;i<190;i++){
-    const x=rand()*512,y=rand()*512,rx=12+rand()*48,ry=7+rand()*30,a=.025+rand()*.07;
-    const light=rand()>.52;
+    const x=rand()*512,y=rand()*512,rx=12+rand()*48,ry=7+rand()*30,a=.025+rand()*.07,light=rand()>.52;
     c.fillStyle=light?`rgba(231,211,164,${a})`:`rgba(102,82,57,${a})`;
     c.beginPath();c.ellipse(x,y,rx,ry,rand()*Math.PI,0,Math.PI*2);c.fill();
     b.fillStyle=light?`rgba(158,158,158,${a*.85})`:`rgba(94,94,94,${a*.85})`;
     b.beginPath();b.ellipse(x,y,rx*.75,ry*.75,rand()*Math.PI,0,Math.PI*2);b.fill();
   }
-
-  // Fine granular soil texture.
   for(let i=0;i<3600;i++){
     const x=rand()*512,y=rand()*512,r=.4+rand()*1.8,light=rand()>.58;
     c.fillStyle=light?`rgba(239,221,178,${.025+rand()*.075})`:`rgba(79,65,47,${.025+rand()*.075})`;
     c.beginPath();c.ellipse(x,y,r*(1+rand()*.9),r,rand()*Math.PI,0,Math.PI*2);c.fill();
-    b.fillStyle=light?'rgba(155,155,155,.12)':'rgba(92,92,92,.12)';
-    b.fillRect(x,y,1+rand()*2,1+rand()*2);
+    b.fillStyle=light?'rgba(155,155,155,.12)':'rgba(92,92,92,.12)';b.fillRect(x,y,1+rand()*2,1+rand()*2);
   }
 
-  // Broken erosion marks and sparse roots; no continuous stripes and no embedded rocks.
   c.lineCap=b.lineCap='round';
   for(let i=0;i<35;i++){
     const x=rand()*450,y=25+rand()*455,len=20+rand()*72,dy=(rand()-.5)*14;
@@ -76,7 +68,6 @@ function makeEarthTextures(){
     c.beginPath();c.moveTo(x,y);c.quadraticCurveTo(x+(rand()-.5)*12,y+len*.48,x+(rand()-.5)*19,y+len);
     c.strokeStyle=`rgba(69,58,40,${.08+rand()*.08})`;c.lineWidth=.7+rand()*1.1;c.stroke();
   }
-
   return {color:makeCanvasTexture(color),bump:makeCanvasTexture(bump)};
 }
 
@@ -87,7 +78,6 @@ function makeTurfTextures(){
   c.fillStyle='#78ad50';c.fillRect(0,0,384,384);
   b.fillStyle='rgb(128,128,128)';b.fillRect(0,0,384,384);
 
-  // Broad patches make the turf feel like living ground, not a single green sheet.
   for(let i=0;i<150;i++){
     const x=rand()*384,y=rand()*384,rx=8+rand()*30,ry=7+rand()*24,light=rand()>.5;
     c.fillStyle=light?`rgba(174,207,100,${.04+rand()*.09})`:`rgba(48,105,51,${.035+rand()*.09})`;
@@ -110,6 +100,14 @@ function pushQuadAsTris(pos,uv,a,b,c,d,ua,ub,uc,ud,flip=false){
   }
 }
 
+function mixPoint(a,b,t,zOffset=0){
+  return [
+    THREE.MathUtils.lerp(a[0],b[0],t),
+    THREE.MathUtils.lerp(a[1],b[1],t),
+    THREE.MathUtils.lerp(a[2],b[2],t)+zOffset,
+  ];
+}
+
 function addTriangleColors(geometry,palette,seed){
   const rand=seededRandom(seed),count=geometry.attributes.position.count,colors=[];
   for(let i=0;i<count;i+=3){
@@ -117,6 +115,17 @@ function addTriangleColors(geometry,palette,seed){
     for(let v=0;v<3;v++)colors.push(col.r,col.g,col.b);
   }
   geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+}
+
+function pushCapFan(pos,uv,points,reverse=false){
+  const pts=reverse?[...points].reverse():points;
+  const centre=pts.reduce((out,p)=>[out[0]+p[0],out[1]+p[1],out[2]+p[2]],[0,0,0]).map(v=>v/pts.length);
+  const uvFor=p=>[(p[2]+.72)/1.44,p[1]/.72];
+  const cuv=uvFor(centre);
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i],b=pts[(i+1)%pts.length];
+    pos.push(...centre,...a,...b);uv.push(...cuv,...uvFor(a),...uvFor(b));
+  }
 }
 
 function makeLedgeGeometry(width,seed){
@@ -127,8 +136,6 @@ function makeLedgeGeometry(width,seed){
     const wave=Math.sin(t*Math.PI*3.15+seed*.014)*.045;
     const h=(.60+wave+(rand()-.5)*.045*end)*(.48+.52*end);
     const edgeNoise=(rand()-.5)*.06*end,frontNoise=(rand()-.5)*.075*end;
-
-    // Rear -> front. The grassy shoulder rolls up and over the crest before the exposed face.
     rows.push([
       [x,.018,-.61+(rand()-.5)*.025*end],
       [x,.08+(.04*end),-.48+(rand()-.5)*.025*end],
@@ -143,26 +150,49 @@ function makeLedgeGeometry(width,seed){
     ]);
   }
 
-  const turfPos=[],turfUv=[],earthPos=[],earthUv=[],shadowPos=[];
+  const turfPos=[],turfUv=[],earthPos=[],earthUv=[],shadowPos=[],creepPos=[],creepUv=[],turfEndPos=[],turfEndUv=[],earthEndPos=[],earthEndUv=[];
+  const edgeRand=seededRandom(seed+3401);
+
   for(let i=0;i<steps;i++){
     const a=rows[i],d=rows[i+1],u0=i/3.2,u1=(i+1)/3.2;
 
-    // Living turf covers the rear slope, crest and a small front shoulder. It is not a flat cap.
     for(let s=0;s<6;s++){
       pushQuadAsTris(turfPos,turfUv,a[s],a[s+1],d[s],d[s+1],[u0,s/6],[u0,(s+1)/6],[u1,s/6],[u1,(s+1)/6],((i+s)&1)!==0);
     }
-
-    // Exposed soil begins under the grassy shoulder and fans out to the toe.
     for(let s=6;s<9;s++){
       pushQuadAsTris(earthPos,earthUv,a[s],a[s+1],d[s],d[s+1],[u0,(s-6)/3],[u0,(s-5)/3],[u1,(s-6)/3],[u1,(s-5)/3],((i+s)&1)!==0);
     }
 
-    // Soft undercut shadow directly below the sod edge gives depth without a black outline.
     const p0=a[6],p1=d[6];
     shadowPos.push(
       ...p0, p0[0],p0[1]-.075,p0[2]+.012, ...p1,
       p0[0],p0[1]-.075,p0[2]+.012, p1[0],p1[1]-.075,p1[2]+.012, ...p1,
     );
+
+    // Grass breaks over the soil in irregular scallops and tongues instead of ending on a straight seam.
+    const style=edgeRand();
+    if(style>.16){
+      const top0=[p0[0],p0[1]+.004,p0[2]+.010],top1=[p1[0],p1[1]+.004,p1[2]+.010];
+      if(style<.72){
+        const drop0=.18+edgeRand()*.52,drop1=.18+edgeRand()*.52;
+        const target0=edgeRand()>.84?a[8]:a[7],target1=edgeRand()>.84?d[8]:d[7];
+        const bot0=mixPoint(p0,target0,drop0,.012),bot1=mixPoint(p1,target1,drop1,.012);
+        pushQuadAsTris(creepPos,creepUv,top0,bot0,top1,bot1,[u0,0],[u0,1],[u1,0],[u1,1],(i&1)!==0);
+      }else{
+        const left=.18+edgeRand()*.16,right=.72+edgeRand()*.14;
+        const ta=mixPoint(top0,top1,left),tb=mixPoint(top0,top1,right);
+        const midTop=mixPoint(p0,p1,(left+right)*.5),midLow=mixPoint(a[7],d[7],(left+right)*.5);
+        const tip=mixPoint(midTop,midLow,.48+edgeRand()*.40,.014);
+        creepPos.push(...ta,...tb,...tip);creepUv.push(u0+(u1-u0)*left,0,u0+(u1-u0)*right,0,u0+(u1-u0)*(left+right)*.5,1);
+      }
+    }
+  }
+
+  // Close the physical ends. The former strip was genuinely open, which is why it vanished from side-on views.
+  for(const [row,reverse] of [[rows[0],false],[rows[rows.length-1],true]]){
+    const base=[row[0][0],.018,row[6][2]];
+    pushCapFan(turfEndPos,turfEndUv,[row[0],row[1],row[2],row[3],row[4],row[5],row[6],base],reverse);
+    pushCapFan(earthEndPos,earthEndUv,[base,row[6],row[7],row[8],row[9]],reverse);
   }
 
   const turf=new THREE.BufferGeometry();turf.setAttribute('position',new THREE.Float32BufferAttribute(turfPos,3));turf.setAttribute('uv',new THREE.Float32BufferAttribute(turfUv,2));turf.computeVertexNormals();
@@ -172,12 +202,21 @@ function makeLedgeGeometry(width,seed){
   addTriangleColors(earth,['#ffffff','#f3eee5','#eae3d7','#f8f3ea','#eee6da'],seed+1307);
 
   const shadow=new THREE.BufferGeometry();shadow.setAttribute('position',new THREE.Float32BufferAttribute(shadowPos,3));shadow.computeVertexNormals();
-  return {turf,earth,shadow,rows};
+
+  const creep=new THREE.BufferGeometry();creep.setAttribute('position',new THREE.Float32BufferAttribute(creepPos,3));creep.setAttribute('uv',new THREE.Float32BufferAttribute(creepUv,2));creep.computeVertexNormals();
+  addTriangleColors(creep,['#ffffff','#eff8e6','#e2f0d6','#f6fce9'],seed+1501);
+
+  const turfEnds=new THREE.BufferGeometry();turfEnds.setAttribute('position',new THREE.Float32BufferAttribute(turfEndPos,3));turfEnds.setAttribute('uv',new THREE.Float32BufferAttribute(turfEndUv,2));turfEnds.computeVertexNormals();
+  addTriangleColors(turfEnds,['#ffffff','#f1fae9','#e8f5dc'],seed+1701);
+
+  const earthEnds=new THREE.BufferGeometry();earthEnds.setAttribute('position',new THREE.Float32BufferAttribute(earthEndPos,3));earthEnds.setAttribute('uv',new THREE.Float32BufferAttribute(earthEndUv,2));earthEnds.computeVertexNormals();
+  addTriangleColors(earthEnds,['#ffffff','#eee7dc','#e5dccf'],seed+1901);
+
+  return {turf,earth,shadow,creep,turfEnds,earthEnds,rows};
 }
 
 function makeTuftGeometry(seed){
   const rand=seededRandom(seed),positions=[],indices=[];let base=0;
-  // Broad opaque anime blades. These are intentionally chunky enough to read at player height.
   for(let blade=0;blade<7;blade++){
     const a=(blade/7)*Math.PI*2+(rand()-.5)*.35,r=.035+rand()*.055;
     const x=Math.cos(a)*r,z=Math.sin(a)*r,h=.14+rand()*.18,w=.028+rand()*.030;
@@ -189,8 +228,7 @@ function makeTuftGeometry(seed){
       x+w*.65,h*.55,z+leanZ*.45,
       x+leanX,h,z+leanZ,
     );
-    indices.push(base,base+1,base+2, base+1,base+3,base+2, base+2,base+3,base+4);
-    base+=5;
+    indices.push(base,base+1,base+2,base+1,base+3,base+2,base+2,base+3,base+4);base+=5;
   }
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setIndex(indices);g.computeVertexNormals();return g;
 }
@@ -199,12 +237,15 @@ function buildLedges(root,mats){
   const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
   const earthTex=makeEarthTextures(),turfTex=makeTurfTextures();
 
-  // Keep material colours white: the texture colours are authored directly and should not be multiplied into red/dark mush.
   const earth=mats.dirt.clone();
   earth.name='route-1-ledge-earth';earth.map=earthTex.color;earth.bumpMap=earthTex.bump;earth.bumpScale=.045;earth.color.set('#ffffff');earth.vertexColors=true;earth.flatShading=true;earth.userData.route1LedgeMaterial=true;earth.needsUpdate=true;
 
   const turf=mats.grass.clone();
   turf.name='route-1-ledge-turf';turf.map=turfTex.color;turf.bumpMap=turfTex.bump;turf.bumpScale=.025;turf.color.set('#ffffff');turf.vertexColors=true;turf.flatShading=true;turf.userData.route1LedgeMaterial=true;turf.needsUpdate=true;
+
+  const endEarth=earth.clone();endEarth.name='route-1-ledge-earth-ends';endEarth.side=THREE.DoubleSide;endEarth.userData.route1LedgeMaterial=true;
+  const endTurf=turf.clone();endTurf.name='route-1-ledge-turf-ends';endTurf.side=THREE.DoubleSide;endTurf.userData.route1LedgeMaterial=true;
+  const creepMat=turf.clone();creepMat.name='route-1-ledge-creeping-turf';creepMat.side=THREE.DoubleSide;creepMat.polygonOffset=true;creepMat.polygonOffsetFactor=-1;creepMat.polygonOffsetUnits=-1;creepMat.userData.route1LedgeMaterial=true;
 
   const undercut=mats.soil.clone();undercut.name='route-1-ledge-undercut';undercut.color.set('#6f6044');undercut.userData.route1LedgeMaterial=true;
   const tuftMat=mats.blade.clone();tuftMat.name='route-1-ledge-tufts';tuftMat.color.set('#699d46');tuftMat.side=THREE.DoubleSide;tuftMat.userData.route1LedgeMaterial=true;
@@ -217,9 +258,11 @@ function buildLedges(root,mats){
 
     const soil=new THREE.Mesh(geo.earth,earth);soil.name='route-1-ledged-soil';soil.position.set(x,0,z);soil.castShadow=true;soil.receiveShadow=true;group.add(soil);
     const grass=new THREE.Mesh(geo.turf,turf);grass.name='route-1-ledged-turf';grass.position.set(x,0,z);grass.receiveShadow=true;group.add(grass);
+    const creep=new THREE.Mesh(geo.creep,creepMat);creep.name='route-1-ledged-grass-creep';creep.position.set(x,0,z);creep.receiveShadow=true;group.add(creep);
+    const eEnds=new THREE.Mesh(geo.earthEnds,endEarth);eEnds.name='route-1-ledged-soil-ends';eEnds.position.set(x,0,z);eEnds.castShadow=true;eEnds.receiveShadow=true;group.add(eEnds);
+    const tEnds=new THREE.Mesh(geo.turfEnds,endTurf);tEnds.name='route-1-ledged-turf-ends';tEnds.position.set(x,0,z);tEnds.receiveShadow=true;group.add(tEnds);
     const shadow=new THREE.Mesh(geo.shadow,undercut);shadow.name='route-1-ledged-undercut';shadow.position.set(x,0,z);group.add(shadow);
 
-    // Dense, broad tufts sit in the turf near the crest; no sparse glass-like needles.
     const rand=seededRandom(seed+701),sets=[[],[],[]],lightSets=[[],[],[]];
     const count=Math.max(5,Math.floor(width/.42));
     for(let i=0;i<count;i++){
