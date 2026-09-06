@@ -6,6 +6,7 @@ import { PALLET_TOWN, tileToWorld } from './layout.js';
 import { createBuilding } from './buildings.js';
 import { makeLandscape, makeTrees, makeGardensAndGrass, makeSky } from './landscape.js';
 import { makeRoute1 } from './route1.js';
+import { upgradeRoute1Ledges } from './route1-ledges.js';
 import { prunePalletRouteBackdrop } from './route1-prune.js';
 import { addResidents } from './residents.js';
 import { exteriorDoorColliders } from './interiors/layout.js';
@@ -29,6 +30,7 @@ export function createPalletTown(scene) {
   extendDistantHorizon(sky);
   prunePalletRouteBackdrop(scene,colliders);
   const route1=makeRoute1(scene,mats,colliders);
+  upgradeRoute1Ledges(route1.root,mats);
   const buildings=new Map();
   for(const spec of PALLET_TOWN.buildings) {
     const group=createBuilding(spec,mats);collapseBuilding(group);scene.add(group);buildings.set(spec.id,group);
