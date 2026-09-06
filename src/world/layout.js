@@ -22,7 +22,7 @@ export const PALLET_TOWN = {
     { x: 6, z: 12, width: 11.2, depth: 3.0, palette: 'pink' },
   ],
   exits: [
-    { id: 'route-1', tile: [10, 0], implemented: false, kind: 'land' },
+    { id: 'route-1', tile: [10, 0], implemented: true, kind: 'land' },
     { id: 'route-21', tile: [5, 17], implemented: false, kind: 'water' },
   ],
   spawns: { start: { x: -11.8, z: 7.8, yaw: -.45 }, home: { x: -9, z: -4.8, yaw: Math.PI } },
