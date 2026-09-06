@@ -11,6 +11,7 @@ import { upgradeRoute1Ledges } from './route1-ledges.js';
 import { prunePalletRouteBackdrop } from './route1-prune.js';
 import { addResidents } from './residents.js';
 import { exteriorDoorColliders } from './interiors/layout.js';
+import { chunkHeavyGrass } from './performance.js';
 
 export function createPalletTown(scene) {
   const mats=makeMaterials(),colliders=[];
@@ -32,7 +33,9 @@ export function createPalletTown(scene) {
   prunePalletRouteBackdrop(scene,colliders);
   const route1=makeRoute1(scene,mats,colliders);
   upgradeRoute1Ledges(route1.root,mats);
+  chunkHeavyGrass(route1.root);
   const viridian=createViridianCity(scene,mats,colliders);
+  chunkHeavyGrass(viridian.root);
   const buildings=new Map();
   for(const spec of PALLET_TOWN.buildings) {
     const group=createBuilding(spec,mats);collapseBuilding(group);scene.add(group);buildings.set(spec.id,group);
