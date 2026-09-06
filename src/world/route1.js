@@ -237,83 +237,103 @@ function flowers(root,mats){
   root.add(instanceSet(new THREE.IcosahedronGeometry(.025,0),mats.flowerCenter,centres,'route-1-flower-centres',false));
 }
 
-function makeEarthBankGeometry(width){
-  // A real terrain cross-section: it rises gently from the north/rear ground,
-  // forms a broad rounded shelf, then drops in a short south-facing cut bank.
-  // ExtrudeGeometry closes the body for us, avoiding the face-winding bugs from
-  // the previous hand-built ledge meshes.
-  const profile=new THREE.Shape();
-  profile.moveTo(-1.00,.015);
-  profile.quadraticCurveTo(-.78,.05,-.64,.17);
-  profile.quadraticCurveTo(-.48,.36,-.28,.50);
-  profile.quadraticCurveTo(-.02,.55,.18,.50);
-  profile.quadraticCurveTo(.34,.43,.44,.22);
-  profile.quadraticCurveTo(.53,.07,.68,.015);
-  profile.lineTo(-1.00,.015);
-
-  const g=new THREE.ExtrudeGeometry(profile,{
-    depth:width,
-    steps:1,
-    curveSegments:5,
-    bevelEnabled:true,
-    bevelSegments:2,
-    bevelSize:.055,
-    bevelThickness:.045,
-  });
-  // Shape x -> world Z, shape y -> world Y, extrusion Z -> world X.
-  g.rotateY(Math.PI/2);
-  g.translate(-width/2,0,0);
-  g.computeVertexNormals();
-  return g;
-}
-
-function makeTurfSurfaceGeometry(width,seed){
-  // The grass is a conforming surface on the bank itself, not a separate pad.
-  // Five profile samples let the turf roll over the shoulder and down the lip.
+function makeAnimeLedgeGeometry(width,seed){
+  // Low, narrow hop ledge: a gentle grassy rear ramp and a short faceted dirt
+  // face toward Pallet (+Z). It is intentionally nothing like a retaining wall.
   const rand=seededRandom(seed);
-  const xSteps=Math.max(4,Math.ceil(width/.8));
-  const profile=[
-    [-.69,.18],[-.50,.38],[-.29,.515],[.15,.515],[.31,.41],
-  ];
-  const positions=[],indices=[];
+  const steps=Math.max(4,Math.ceil(width/.65));
+  const bodyPos=[],bodyIdx=[],grassPos=[],grassIdx=[];
+  const bodyGroups=[];
 
-  for(let ix=0;ix<=xSteps;ix++){
-    const t=ix/xSteps;
+  const sections=[];
+  for(let i=0;i<=steps;i++){
+    const t=i/steps;
     const x=-width/2+t*width;
-    const ease=Math.sin(Math.PI*t);
-    const yJitter=(rand()-.5)*.018*ease;
-    const zJitter=(rand()-.5)*.018*ease;
-    for(const [z,y] of profile)positions.push(x,y+.012+yJitter,z+zJitter);
+    const edgeEase=Math.sin(Math.PI*t);
+    const h=.29+Math.sin(t*Math.PI*2+seed*.07)*.018+(rand()-.5)*.018*edgeEase;
+    const rearZ=-.34+(rand()-.5)*.018*edgeEase;
+    const shoulderZ=-.14+(rand()-.5)*.015*edgeEase;
+    const ridgeZ=.055+(rand()-.5)*.018*edgeEase;
+    const toeZ=.34+(rand()-.5)*.018*edgeEase;
+    sections.push({x,h,rearZ,shoulderZ,ridgeZ,toeZ});
+
+    // Body keeps the complete cross-section so the gaps have proper end caps.
+    bodyPos.push(
+      x,.018,rearZ,
+      x,h*.72,shoulderZ,
+      x,h,ridgeZ,
+      x,.018,toeZ,
+    );
+    // Grass occupies the upper terrain itself: rear toe -> shoulder -> ridge.
+    grassPos.push(
+      x,.022,rearZ,
+      x,h*.72+.008,shoulderZ,
+      x,h+.008,ridgeZ,
+    );
   }
 
-  const row=profile.length;
-  for(let ix=0;ix<xSteps;ix++){
-    const a=ix*row,b=(ix+1)*row;
-    for(let p=0;p<row-1;p++){
-      // Wound upward (+Y): along-profile (+Z), then along-width (+X).
-      indices.push(a+p,a+p+1,b+p,a+p+1,b+p+1,b+p);
-    }
+  // South-facing dirt face. Each quad is two differently shaded triangles so
+  // it reads as hand-faceted anime terrain instead of one dead flat slab.
+  for(let i=0;i<steps;i++){
+    const a=i*4,b=(i+1)*4;
+    const start=bodyIdx.length;
+    bodyIdx.push(a+2,a+3,b+2, a+3,b+3,b+2);
+    bodyGroups.push({start,count:3,materialIndex:(i+seed)%3});
+    bodyGroups.push({start:start+3,count:3,materialIndex:(i+seed+1)%3});
   }
 
-  const g=new THREE.BufferGeometry();
-  g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
-  g.setIndex(indices);g.computeVertexNormals();
-  return g;
+  // Darker triangular end caps are visible at the canonical gaps.
+  bodyIdx.push(0,1,2, 0,2,3);
+  bodyGroups.push({start:bodyIdx.length-6,count:6,materialIndex:2});
+  const e=steps*4;
+  bodyIdx.push(e,e+2,e+1, e,e+3,e+2);
+  bodyGroups.push({start:bodyIdx.length-6,count:6,materialIndex:2});
+
+  // Small ground underside closes the mesh without creating another visible bar.
+  const underStart=bodyIdx.length;
+  for(let i=0;i<steps;i++){
+    const a=i*4,b=(i+1)*4;
+    bodyIdx.push(a,a+3,b, a+3,b+3,b);
+  }
+  bodyGroups.push({start:underStart,count:bodyIdx.length-underStart,materialIndex:2});
+
+  const body=new THREE.BufferGeometry();
+  body.setAttribute('position',new THREE.Float32BufferAttribute(bodyPos,3));
+  body.setIndex(bodyIdx);bodyGroups.forEach(g=>body.addGroup(g.start,g.count,g.materialIndex));body.computeVertexNormals();
+
+  // Two sloped grass strips per section, both wound upward.
+  for(let i=0;i<steps;i++){
+    const a=i*3,b=(i+1)*3;
+    grassIdx.push(
+      a,a+1,b, a+1,b+1,b,
+      a+1,a+2,b+1, a+2,b+2,b+1,
+    );
+  }
+  const grass=new THREE.BufferGeometry();
+  grass.setAttribute('position',new THREE.Float32BufferAttribute(grassPos,3));
+  grass.setIndex(grassIdx);grass.computeVertexNormals();
+
+  return {body,grass};
 }
 
 function ledges(root,mats){
   const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
-  const earth=mats.dirt.clone();earth.name='route-1-ledge-earth';earth.color.set('#a77c57');
-  const turf=mats.grass.clone();turf.name='route-1-ledge-turf';turf.color.set('#83b954');
+
+  const earth=mats.dirt.clone();earth.name='route-1-ledge-earth';earth.color.set('#b98250');
+  const earthLight=mats.dirt.clone();earthLight.name='route-1-ledge-earth-light';earthLight.color.set('#cc9861');
+  const earthDark=mats.soil.clone();earthDark.name='route-1-ledge-earth-shadow';earthDark.color.set('#8d6847');
+  const turf=mats.grass.clone();turf.name='route-1-ledge-grass';turf.color.set('#7fba50');
 
   LEDGE_RUNS.forEach(([r,c0,c1],index)=>{
     const width=(c1-c0+1)*2;
-    const left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.70;
-    const bank=new THREE.Mesh(makeEarthBankGeometry(width),earth);
-    bank.name='route-1-terrain-ledge-earth';bank.position.set(x,0,z);bank.castShadow=true;bank.receiveShadow=true;group.add(bank);
+    const left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.16;
+    const geo=makeAnimeLedgeGeometry(width,4700+r*37+c0*19+index);
 
-    const grass=new THREE.Mesh(makeTurfSurfaceGeometry(width,9100+r*31+c0*17+index),turf);
-    grass.name='route-1-terrain-ledge-grass';grass.position.set(x,0,z);grass.receiveShadow=true;group.add(grass);
+    const body=new THREE.Mesh(geo.body,[earth,earthLight,earthDark]);
+    body.name='route-1-anime-ledge-earth';body.position.set(x,0,z);body.castShadow=true;body.receiveShadow=true;group.add(body);
+
+    const grass=new THREE.Mesh(geo.grass,turf);
+    grass.name='route-1-anime-ledge-grass';grass.position.set(x,0,z);grass.receiveShadow=true;group.add(grass);
   });
 }
 
