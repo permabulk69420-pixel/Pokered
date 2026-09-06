@@ -24,14 +24,23 @@ const SPECIES=Object.freeze({
     key:'charmander',id:4,name:'Charmander',height:.61,
     asset:'assets/pokemon/Charmander_Animated.glb',
     idle:['idle','stand','breath'],walk:['walk'],run:['run','sprint'],scratch:['scratch','attack','swipe'],
+    animationSpeed:Object.freeze({run:.72}),
+    forwardYaw:0,
+  }),
+  squirtle:Object.freeze({
+    key:'squirtle',id:7,name:'Squirtle',height:.5,
+    asset:'assets/pokemon/Squirtle_Animated.glb',
+    idle:['idle'],walk:['walk'],run:['run'],tackle:['tackle'],tailWhip:['tailwhip','tail whip','tail_whip'],
+    animationSpeed:Object.freeze({}),
     forwardYaw:0,
   }),
 });
 
 const STARTER_SLOT_KEYS=Object.freeze(['charmander','squirtle','bulbasaur']);
+const ANIMATION_KEYS=Object.freeze(['idle','walk','run','scratch','tackle','tailWhip']);
 
 function chooseClip(clips,aliases){
-  for(const alias of aliases){
+  for(const alias of aliases||[]){
     const exact=clips.find(clip=>clip.name.toLowerCase()===alias);if(exact)return exact;
     const partial=clips.find(clip=>clip.name.toLowerCase().includes(alias));if(partial)return partial;
   }
@@ -39,14 +48,17 @@ function chooseClip(clips,aliases){
 }
 
 function makeAnimator(model,clips,species){
-  if(!clips?.length)return {update(){},play(){},names:[]};
-  const mixer=new THREE.AnimationMixer(model),actions=new Map();
-  const selected={idle:chooseClip(clips,species.idle),walk:chooseClip(clips,species.walk),run:chooseClip(clips,species.run),scratch:chooseClip(clips,species.scratch)};
-  for(const [key,clip] of Object.entries(selected))if(clip){
+  if(!clips?.length)return {update(){},play(){},names:[],selected:{}};
+  const mixer=new THREE.AnimationMixer(model),actions=new Map(),selected={};
+  for(const key of ANIMATION_KEYS){
+    const clip=chooseClip(clips,species[key]);
+    if(clip)selected[key]=clip;
+  }
+  for(const [key,clip] of Object.entries(selected)){
     const action=mixer.clipAction(clip);
     action.enabled=true;
     action.setLoop(THREE.LoopRepeat,Infinity);
-    action.setEffectiveTimeScale(key==='run'?.72:1);
+    action.setEffectiveTimeScale(species.animationSpeed?.[key]??1);
     actions.set(key,action);
   }
   let current=null,currentKey=null;
@@ -54,13 +66,17 @@ function makeAnimator(model,clips,species){
     const next=actions.get(key)||actions.get('idle')||actions.values().next().value;
     if(!next||next===current)return;
     next.reset();
-    next.setEffectiveTimeScale(key==='run'?.72:1);
+    next.setEffectiveTimeScale(species.animationSpeed?.[key]??1);
     next.fadeIn(.18).play();
     if(current)current.fadeOut(.18);
     current=next;currentKey=key;
   }
   play('idle');
-  return {update:dt=>mixer.update(dt),play,names:clips.map(clip=>clip.name),get current(){return currentKey;}};
+  return {
+    update:dt=>mixer.update(dt),play,names:clips.map(clip=>clip.name),
+    selected:Object.fromEntries(Object.entries(selected).map(([key,clip])=>[key,clip.name])),
+    get current(){return currentKey;},
+  };
 }
 
 function normalizeModel(model,height){
@@ -224,25 +240,30 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
   const trail=[];
   const state={flags:{starterSelectionUnlocked:true,starterChosen:false},starter:null,party:[]};
   const starterSlots=findStarterSlots(scene);
+  const assets=new Map();
   let activeKey=null,model=null,animator=null,lastSpaceVisible=false,transition=null;
 
   async function loadSpecies(key){
+    if(assets.has(key))return assets.get(key);
     const species=SPECIES[key];if(!species)throw new Error(`No Pokémon asset configured for ${key}.`);
     const gltf=await loader.loadAsync(new URL(species.asset,document.baseURI).href);
     const root=gltf.scene;root.name=`${key}-model`;normalizeModel(root,species.height);
     root.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=true;object.frustumCulled=true;}});
-    return {species,root,animation:makeAnimator(root,gltf.animations,species)};
+    const asset={species,root,animation:makeAnimator(root,gltf.animations,species)};
+    assets.set(key,asset);return asset;
   }
 
-  let charmanderAsset=null;
-  try{charmanderAsset=await loadSpecies('charmander');}catch(error){console.warn('Charmander asset could not be loaded.',error);}
+  const preloadResults=await Promise.allSettled(['charmander','squirtle'].map(loadSpecies));
+  preloadResults.forEach((result,index)=>{
+    if(result.status==='rejected')console.warn(`${index===0?'Charmander':'Squirtle'} asset could not be loaded.`,result.reason);
+  });
 
   function stateSnapshot(){return {starter:state.starter,party:state.party.map(p=>({...p})),flags:{...state.flags},active:activeKey};}
   function emit(type,detail={}){try{window.dispatchEvent(new CustomEvent('kanto:pokemon',{detail:{type,...detail,state:stateSnapshot()}}));}catch{}}
 
   function claimStarter(key,inputState,mount){
     if(state.flags.starterChosen||!state.flags.starterSelectionUnlocked)return false;
-    const species=SPECIES[key];if(!species||!charmanderAsset)return false;
+    const species=SPECIES[key];if(!species||!assets.has(key))return false;
     state.flags.starterChosen=true;state.starter=key;
     state.party.push({species:key,id:species.id,name:species.name,level:5,ball:'pokeball'});
     mount.visible=false;onClaimBall?.(key,inputState);
@@ -262,7 +283,14 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
     }
   }
 
-  function ensureCompanion(){if(!model&&charmanderAsset){model=charmanderAsset.root;animator=charmanderAsset.animation;companion.add(model);}}
+  function ensureCompanion(key){
+    const asset=assets.get(key);if(!asset)return false;
+    if(model!==asset.root){
+      if(model?.parent===companion)companion.remove(model);
+      model=asset.root;animator=asset.animation;companion.add(model);
+    }
+    return true;
+  }
 
   function resetTrail(){
     trail.length=0;if(!playerCamera)return;
@@ -296,11 +324,12 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
   }
 
   function release(key,position){
-    if(transition||!state.party.some(p=>p.species===key)||activeKey===key||key!=='charmander'||!charmanderAsset)return false;
-    ensureCompanion();activeKey=key;companion.visible=renderer.xr.isPresenting;
-    companion.position.set(position.x,rig.position.y,position.z);companion.rotation.set(0,SPECIES[key].forwardYaw,0);
+    const species=SPECIES[key];
+    if(transition||!species||!state.party.some(p=>p.species===key)||activeKey===key||!ensureCompanion(key))return false;
+    activeKey=key;companion.visible=renderer.xr.isPresenting;
+    companion.position.set(position.x,rig.position.y,position.z);companion.rotation.set(0,species.forwardYaw,0);
     companion.scale.setScalar(.045);animator?.play('idle');resetTrail();
-    pokemonFxPoint.set(position.x,rig.position.y+SPECIES[key].height*.48,position.z);
+    pokemonFxPoint.set(position.x,rig.position.y+species.height*.48,position.z);
     fx.release(position,pokemonFxPoint);
     transition={type:'release',t:0,key};
     emit('released',{species:key});return true;
@@ -308,7 +337,8 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
 
   function recall(key,ballPosition=null){
     if(transition||activeKey!==key)return false;
-    companion.getWorldPosition(temp);pokemonFxPoint.copy(temp);pokemonFxPoint.y+=SPECIES[key].height*.48;
+    const species=SPECIES[key];if(!species)return false;
+    companion.getWorldPosition(temp);pokemonFxPoint.copy(temp);pokemonFxPoint.y+=species.height*.48;
     const target=ballPosition?.clone?.()||pokemonFxPoint.clone();
     fx.recall(target,pokemonFxPoint);
     transition={type:'recall',t:0,key,ball:target,start:companion.position.clone()};
@@ -352,7 +382,7 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
     else if(distance>FOLLOW_STOP){
       const running=distance>FOLLOW_RUN_DISTANCE,speed=running?FOLLOW_RUN:FOLLOW_WALK,step=Math.min(distance-FOLLOW_STOP,speed*dt);
       delta.normalize();companion.position.addScaledVector(delta,step);
-      const targetYaw=Math.atan2(delta.x,delta.z)+SPECIES[activeKey].forwardYaw;
+      const targetYaw=Math.atan2(delta.x,delta.z)+(SPECIES[activeKey]?.forwardYaw||0);
       const turn=THREE.MathUtils.euclideanModulo(targetYaw-companion.rotation.y+Math.PI,Math.PI*2)-Math.PI;companion.rotation.y+=turn*Math.min(1,dt*7);
       animator?.play(running?'run':'walk');
     }else animator?.play('idle');
@@ -371,8 +401,13 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
     if(activeKey){companion.visible=false;resetTrail();fallbackBehind(desired);companion.position.copy(desired);}
   }
   function setStarterSelectionUnlocked(value){state.flags.starterSelectionUnlocked=!!value;emit('starter-lock',{unlocked:state.flags.starterSelectionUnlocked});}
+  function animationInfo(key){
+    const asset=assets.get(key);return asset?{names:[...asset.animation.names],selected:{...asset.animation.selected}}:null;
+  }
 
-  return {update,ballOpened,release,recall,resetSession,setStarterSelectionUnlocked,
+  return {update,ballOpened,release,recall,resetSession,setStarterSelectionUnlocked,animationInfo,
     get starter(){return state.starter;},get party(){return state.party.map(p=>({...p}));},get active(){return activeKey;},
-    get animations(){return animator?.names||charmanderAsset?.animation?.names||[];},get state(){return stateSnapshot();}};
+    get animations(){return animator?.names||assets.get('charmander')?.animation?.names||[];},
+    get animationsBySpecies(){return Object.fromEntries([...assets].map(([key,asset])=>[key,{names:[...asset.animation.names],selected:{...asset.animation.selected}}]));},
+    get state(){return stateSnapshot();}};
 }
