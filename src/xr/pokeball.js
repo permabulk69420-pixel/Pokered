@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createPokemonSystem } from '../game/pokemon.js';
 
 const BALL_RADIUS=.05;
 const GRAB_RADIUS=.22;
@@ -41,7 +42,7 @@ export async function setupPokeball({renderer,rig,states}) {
   const tmp=new THREE.Vector3(),ballWorld=new THREE.Vector3(),gripWorld=new THREE.Vector3();
   const velocity=new THREE.Vector3(),spin=new THREE.Vector3();
   const samples=states.map(()=>({last:new THREE.Vector3(),velocity:new THREE.Vector3(),ready:false}));
-  let mode='holstered',heldState=null,groundY=BALL_RADIUS,opened=false;
+  let mode='holstered',heldState=null,groundY=BALL_RADIUS,opened=false,linkedSpecies=null,pokemonSystem=null;
 
   function closeBall(){
     opened=false;
@@ -53,13 +54,19 @@ export async function setupPokeball({renderer,rig,states}) {
   }
 
   function openBall(){
-    if(opened||!openAction)return;
+    if(opened)return;
     opened=true;
-    openAction.paused=false;
-    openAction.reset();
-    openAction.setLoop(THREE.LoopOnce,1);
-    openAction.clampWhenFinished=true;
-    openAction.play();
+    if(openAction){
+      openAction.paused=false;
+      openAction.reset();
+      openAction.setLoop(THREE.LoopOnce,1);
+      openAction.clampWhenFinished=true;
+      openAction.play();
+    }
+    if(linkedSpecies&&pokemonSystem){
+      ball.updateMatrixWorld(true);ball.getWorldPosition(ballWorld);
+      pokemonSystem.ballOpened(linkedSpecies,ballWorld.clone());
+    }
   }
 
   function updateHolster(){
@@ -105,6 +112,14 @@ export async function setupPokeball({renderer,rig,states}) {
       ball.rotation.set(0,0,0);
     }
     ball.scale.setScalar(1);
+  }
+
+  function claimStarterBall(species,state){
+    linkedSpecies=species;
+    // The lab prop is hidden by the Pokémon system at the same instant this
+    // identical runtime ball attaches to the grabbing hand, so the pickup reads
+    // as one physical object rather than a menu selection.
+    holdBall(state);
   }
 
   function releaseBall(sample){
@@ -185,15 +200,17 @@ export async function setupPokeball({renderer,rig,states}) {
   function reset(){
     resetSamples();
     holsterBall();
+    pokemonSystem?.resetSession();
   }
 
   function update(dt){
     const xr=renderer.xr.isPresenting;
     ball.visible=xr;
     holster.visible=xr;
-    if(!xr)return;
+    if(!xr){pokemonSystem?.update(dt);return;}
     updateHolster();
     rig.updateMatrixWorld(true);
+    pokemonSystem?.update(dt);
     sampleHands(dt);
     updatePhysics(dt);
     mixer.update(dt);
@@ -204,6 +221,10 @@ export async function setupPokeball({renderer,rig,states}) {
   ball.visible=false;
   holster.visible=false;
 
+  try{
+    pokemonSystem=await createPokemonSystem({renderer,scene,rig,states,onClaimBall:claimStarterBall});
+  }catch(error){console.warn('Pokémon system setup:',error);}
+
   renderer.xr.addEventListener('sessionstart',resetSamples);
   renderer.xr.addEventListener('sessionend',()=>{reset();ball.visible=false;holster.visible=false;});
 
@@ -213,5 +234,9 @@ export async function setupPokeball({renderer,rig,states}) {
     update,
     reset,
     get mode(){return mode;},
+    get linkedSpecies(){return linkedSpecies;},
+    get pokemon(){return pokemonSystem?.state||null;},
+    get pokemonAnimations(){return pokemonSystem?.animations||[];},
+    setStarterSelectionUnlocked(value){pokemonSystem?.setStarterSelectionUnlocked(value);},
   };
 }
