@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
+import { setupPokeball } from './pokeball.js';
 
 const DEFAULT_ROTATIONS=Object.freeze({
   left:Object.freeze([0,0,Math.PI/2]),
@@ -85,6 +86,10 @@ export async function setupHands(renderer,rig) {
     state.controller.addEventListener('disconnected',()=>{state.inputSource=null;state.handedness='';detach(state);});
   }
 
+  let pokeball=null;
+  try {pokeball=await setupPokeball({rig,states});}
+  catch(error){console.warn('Poké Ball setup:',error);}
+
   function update(dt) {
     for(const state of states) {
       if(!state.animation)continue;
@@ -97,7 +102,8 @@ export async function setupHands(renderer,rig) {
       // to evaluate every XR frame for the bones to follow the analog controls.
       state.animation.mixer.update(dt);
     }
+    pokeball?.update(dt);
   }
 
-  return {controllers,grips,states,update};
+  return {controllers,grips,states,pokeball,update};
 }
