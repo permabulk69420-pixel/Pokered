@@ -15,71 +15,100 @@ const LEDGE_RUNS=[
 function disposeTree(root){
   root.traverse(obj=>{
     if(obj.geometry?.dispose)obj.geometry.dispose();
-    if(obj.material){
-      const materials=Array.isArray(obj.material)?obj.material:[obj.material];
-      for(const m of materials){
-        if(m.map?.userData?.route1LedgeTexture)m.map.dispose();
-        if(m.userData?.route1LedgeMaterial)m.dispose();
-      }
+    const materials=obj.material?(Array.isArray(obj.material)?obj.material:[obj.material]):[];
+    for(const m of materials){
+      if(m.map?.userData?.route1LedgeTexture)m.map.dispose();
+      if(m.bumpMap?.userData?.route1LedgeTexture)m.bumpMap.dispose();
+      if(m.userData?.route1LedgeMaterial)m.dispose();
     }
   });
   root.removeFromParent();
 }
 
-function makeEarthTexture(){
-  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;
-  const ctx=canvas.getContext('2d'),rand=seededRandom(2718);
-  ctx.fillStyle='#b67d53';ctx.fillRect(0,0,512,512);
-
-  // Broad mottling first: this reads as soil rather than wood grain.
-  for(let i=0;i<260;i++){
-    const x=rand()*512,y=rand()*512,rx=10+rand()*42,ry=6+rand()*24;
-    ctx.fillStyle=rand()>.52?`rgba(83,55,39,${.025+rand()*.055})`:`rgba(245,198,141,${.022+rand()*.05})`;
-    ctx.beginPath();ctx.ellipse(x,y,rx,ry,rand()*Math.PI,0,Math.PI*2);ctx.fill();
-  }
-
-  // Fine soil grain and compacted flecks.
-  for(let i=0;i<2800;i++){
-    const x=rand()*512,y=rand()*512,r=.35+rand()*1.7;
-    ctx.fillStyle=rand()>.55?`rgba(74,50,36,${.025+rand()*.075})`:`rgba(255,220,172,${.02+rand()*.06})`;
-    ctx.beginPath();ctx.ellipse(x,y,r*(1+rand()*1.2),r,rand()*Math.PI,0,Math.PI*2);ctx.fill();
-  }
-
-  // Only a few broken strata marks; never continuous horizontal stripes.
-  ctx.lineCap='round';
-  for(let i=0;i<28;i++){
-    const x=rand()*470,y=25+rand()*450,len=18+rand()*55;
-    ctx.beginPath();ctx.moveTo(x,y);
-    ctx.quadraticCurveTo(x+len*.45,y+(rand()-.5)*10,x+len,y+(rand()-.5)*8);
-    ctx.strokeStyle=rand()>.5?`rgba(94,58,39,${.07+rand()*.08})`:`rgba(238,183,124,${.06+rand()*.07})`;
-    ctx.lineWidth=1+rand()*2.5;ctx.stroke();
-  }
-
-  // Fine root traces are sparse and mostly vertical/diagonal.
-  for(let i=0;i<22;i++){
-    const x=rand()*512,y=rand()*330,len=16+rand()*55;
-    ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+(rand()-.5)*15,y+len*.45,x+(rand()-.5)*22,y+len);
-    ctx.strokeStyle=`rgba(78,55,35,${.09+rand()*.09})`;ctx.lineWidth=.7+rand()*1.3;ctx.stroke();
-  }
-
-  const tex=new THREE.CanvasTexture(canvas);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;tex.userData.route1LedgeTexture=true;
+function makeCanvasTexture(canvas){
+  const tex=new THREE.CanvasTexture(canvas);
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.colorSpace=THREE.SRGBColorSpace;
+  tex.anisotropy=8;
+  tex.userData.route1LedgeTexture=true;
   return tex;
 }
 
-function makeTurfTexture(){
-  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
-  const ctx=canvas.getContext('2d'),rand=seededRandom(31415);
-  ctx.fillStyle='#82b955';ctx.fillRect(0,0,256,256);
-  for(let i=0;i<1050;i++){
-    const x=rand()*256,y=rand()*256;
-    ctx.fillStyle=rand()>.52?`rgba(45,104,48,${.035+rand()*.09})`:`rgba(194,224,112,${.03+rand()*.09})`;
-    ctx.beginPath();ctx.ellipse(x,y,.4+rand()*1.4,.7+rand()*2.4,rand()*Math.PI,0,Math.PI*2);ctx.fill();
+function makeEarthTextures(){
+  const color=document.createElement('canvas'),bump=document.createElement('canvas');
+  color.width=color.height=bump.width=bump.height=512;
+  const c=color.getContext('2d'),b=bump.getContext('2d'),rand=seededRandom(8021);
+
+  // Muted warm soil, deliberately close to Pallet's tan/olive palette rather than red clay.
+  c.fillStyle='#b79a6d';c.fillRect(0,0,512,512);
+  b.fillStyle='rgb(128,128,128)';b.fillRect(0,0,512,512);
+
+  // Large soft variation prevents the bank reading as a flat coloured strip.
+  for(let i=0;i<190;i++){
+    const x=rand()*512,y=rand()*512,rx=12+rand()*48,ry=7+rand()*30,a=.025+rand()*.07;
+    const light=rand()>.52;
+    c.fillStyle=light?`rgba(231,211,164,${a})`:`rgba(102,82,57,${a})`;
+    c.beginPath();c.ellipse(x,y,rx,ry,rand()*Math.PI,0,Math.PI*2);c.fill();
+    b.fillStyle=light?`rgba(158,158,158,${a*.85})`:`rgba(94,94,94,${a*.85})`;
+    b.beginPath();b.ellipse(x,y,rx*.75,ry*.75,rand()*Math.PI,0,Math.PI*2);b.fill();
   }
-  const tex=new THREE.CanvasTexture(canvas);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;tex.userData.route1LedgeTexture=true;
-  return tex;
+
+  // Fine granular soil texture.
+  for(let i=0;i<3600;i++){
+    const x=rand()*512,y=rand()*512,r=.4+rand()*1.8,light=rand()>.58;
+    c.fillStyle=light?`rgba(239,221,178,${.025+rand()*.075})`:`rgba(79,65,47,${.025+rand()*.075})`;
+    c.beginPath();c.ellipse(x,y,r*(1+rand()*.9),r,rand()*Math.PI,0,Math.PI*2);c.fill();
+    b.fillStyle=light?'rgba(155,155,155,.12)':'rgba(92,92,92,.12)';
+    b.fillRect(x,y,1+rand()*2,1+rand()*2);
+  }
+
+  // Broken erosion marks and sparse roots; no continuous stripes and no embedded rocks.
+  c.lineCap=b.lineCap='round';
+  for(let i=0;i<35;i++){
+    const x=rand()*450,y=25+rand()*455,len=20+rand()*72,dy=(rand()-.5)*14;
+    c.beginPath();c.moveTo(x,y);c.quadraticCurveTo(x+len*.48,y+dy*.4,x+len,y+dy);
+    c.strokeStyle=rand()>.5?`rgba(77,60,42,${.075+rand()*.07})`:`rgba(226,199,146,${.06+rand()*.07})`;
+    c.lineWidth=1+rand()*2.2;c.stroke();
+    b.beginPath();b.moveTo(x,y);b.quadraticCurveTo(x+len*.48,y+dy*.4,x+len,y+dy);b.strokeStyle='rgba(88,88,88,.12)';b.lineWidth=1.3;b.stroke();
+  }
+  for(let i=0;i<18;i++){
+    const x=rand()*512,y=rand()*320,len=18+rand()*58;
+    c.beginPath();c.moveTo(x,y);c.quadraticCurveTo(x+(rand()-.5)*12,y+len*.48,x+(rand()-.5)*19,y+len);
+    c.strokeStyle=`rgba(69,58,40,${.08+rand()*.08})`;c.lineWidth=.7+rand()*1.1;c.stroke();
+  }
+
+  return {color:makeCanvasTexture(color),bump:makeCanvasTexture(bump)};
 }
 
-function pushTri(target,uvs,a,b,c,ua,ub,uc){target.push(...a,...b,...c);uvs.push(...ua,...ub,...uc);}
+function makeTurfTextures(){
+  const color=document.createElement('canvas'),bump=document.createElement('canvas');
+  color.width=color.height=bump.width=bump.height=384;
+  const c=color.getContext('2d'),b=bump.getContext('2d'),rand=seededRandom(9917);
+  c.fillStyle='#78ad50';c.fillRect(0,0,384,384);
+  b.fillStyle='rgb(128,128,128)';b.fillRect(0,0,384,384);
+
+  // Broad patches make the turf feel like living ground, not a single green sheet.
+  for(let i=0;i<150;i++){
+    const x=rand()*384,y=rand()*384,rx=8+rand()*30,ry=7+rand()*24,light=rand()>.5;
+    c.fillStyle=light?`rgba(174,207,100,${.04+rand()*.09})`:`rgba(48,105,51,${.035+rand()*.09})`;
+    c.beginPath();c.ellipse(x,y,rx,ry,rand()*Math.PI,0,Math.PI*2);c.fill();
+  }
+  for(let i=0;i<2600;i++){
+    const x=rand()*384,y=rand()*384,h=.8+rand()*3.4,w=.35+rand()*1.2,light=rand()>.52;
+    c.fillStyle=light?`rgba(201,226,116,${.035+rand()*.10})`:`rgba(43,95,45,${.035+rand()*.10})`;
+    c.beginPath();c.ellipse(x,y,w,h,rand()*Math.PI,0,Math.PI*2);c.fill();
+    b.fillStyle=light?'rgba(154,154,154,.12)':'rgba(100,100,100,.12)';b.fillRect(x,y,1,1+rand()*2);
+  }
+  return {color:makeCanvasTexture(color),bump:makeCanvasTexture(bump)};
+}
+
+function pushQuadAsTris(pos,uv,a,b,c,d,ua,ub,uc,ud,flip=false){
+  if(flip){
+    pos.push(...a,...b,...d,...a,...d,...c);uv.push(...ua,...ub,...ud,...ua,...ud,...uc);
+  }else{
+    pos.push(...a,...b,...c,...b,...d,...c);uv.push(...ua,...ub,...uc,...ub,...ud,...uc);
+  }
+}
 
 function addTriangleColors(geometry,palette,seed){
   const rand=seededRandom(seed),count=geometry.attributes.position.count,colors=[];
@@ -90,97 +119,119 @@ function addTriangleColors(geometry,palette,seed){
   geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
 }
 
-function makeBankGeometry(width,seed){
-  const rand=seededRandom(seed),steps=Math.max(10,Math.ceil(width/.42)),rows=[];
+function makeLedgeGeometry(width,seed){
+  const rand=seededRandom(seed),steps=Math.max(12,Math.ceil(width/.36)),rows=[];
+
   for(let i=0;i<=steps;i++){
-    const t=i/steps,x=-width/2+t*width;
-    const endFade=Math.min(1,t*4,(1-t)*4);
-    const longWave=Math.sin(t*Math.PI*3.2+seed*.017)*.045;
-    const h=(.59+longWave+(rand()-.5)*.055)*(.62+.38*endFade);
-    const depthWave=Math.sin(t*Math.PI*4.6+seed*.031)*.055;
-    const frontNoise=(rand()-.5)*.10*endFade,rearNoise=(rand()-.5)*.06*endFade;
+    const t=i/steps,x=-width/2+t*width,end=Math.min(1,t*5,(1-t)*5);
+    const wave=Math.sin(t*Math.PI*3.15+seed*.014)*.045;
+    const h=(.60+wave+(rand()-.5)*.045*end)*(.48+.52*end);
+    const edgeNoise=(rand()-.5)*.06*end,frontNoise=(rand()-.5)*.075*end;
+
+    // Rear -> front. The grassy shoulder rolls up and over the crest before the exposed face.
     rows.push([
-      [x,.018,-.58+rearNoise],
-      [x,h*.25,-.37+rearNoise*.6],
-      [x,h*.67,-.22+(rand()-.5)*.045*endFade],
-      [x,h*.94,-.105+(rand()-.5)*.04*endFade],
-      [x,h+.018,.015+depthWave+(rand()-.5)*.035*endFade],
-      [x,h*.82,.14+depthWave*.7+frontNoise*.35],
-      [x,h*.48,.29+frontNoise],
-      [x,h*.18,.41+frontNoise*.75],
-      [x,.018,.49+frontNoise*.45],
+      [x,.018,-.61+(rand()-.5)*.025*end],
+      [x,.08+(.04*end),-.48+(rand()-.5)*.025*end],
+      [x,h*.47,-.33+(rand()-.5)*.035*end],
+      [x,h*.84,-.20+(rand()-.5)*.035*end],
+      [x,h+.018,-.055+edgeNoise],
+      [x,h*.91,.075+edgeNoise*.7],
+      [x,h*.72,.15+frontNoise*.35],
+      [x,h*.47,.27+frontNoise],
+      [x,h*.20,.40+frontNoise*.75],
+      [x,.018,.50+frontNoise*.45],
     ]);
   }
 
-  const earthPos=[],earthUv=[],grassPos=[],grassUv=[];
+  const turfPos=[],turfUv=[],earthPos=[],earthUv=[],shadowPos=[];
   for(let i=0;i<steps;i++){
-    const a=rows[i],b=rows[i+1],u0=(i/steps)*width/1.15,u1=((i+1)/steps)*width/1.15;
-    // Turf is a continuous sloped shoulder up to the crest — not a flat green lid.
-    for(let s=0;s<4;s++){
-      const p0=a[s],p1=a[s+1],p2=b[s],p3=b[s+1],v0=s/4,v1=(s+1)/4;
-      if((i+s)&1){pushTri(grassPos,grassUv,p0,p1,p3,[u0,v0],[u0,v1],[u1,v1]);pushTri(grassPos,grassUv,p0,p3,p2,[u0,v0],[u1,v1],[u1,v0]);}
-      else{pushTri(grassPos,grassUv,p0,p1,p2,[u0,v0],[u0,v1],[u1,v0]);pushTri(grassPos,grassUv,p1,p3,p2,[u0,v1],[u1,v1],[u1,v0]);}
+    const a=rows[i],d=rows[i+1],u0=i/3.2,u1=(i+1)/3.2;
+
+    // Living turf covers the rear slope, crest and a small front shoulder. It is not a flat cap.
+    for(let s=0;s<6;s++){
+      pushQuadAsTris(turfPos,turfUv,a[s],a[s+1],d[s],d[s+1],[u0,s/6],[u0,(s+1)/6],[u1,s/6],[u1,(s+1)/6],((i+s)&1)!==0);
     }
-    // The exposed face is triangulated and genuinely non-planar.
-    for(let s=4;s<8;s++){
-      const p0=a[s],p1=a[s+1],p2=b[s],p3=b[s+1],v0=(s-4)/4,v1=(s-3)/4;
-      if((i+s)&1){pushTri(earthPos,earthUv,p0,p1,p3,[u0,v0],[u0,v1],[u1,v1]);pushTri(earthPos,earthUv,p0,p3,p2,[u0,v0],[u1,v1],[u1,v0]);}
-      else{pushTri(earthPos,earthUv,p0,p1,p2,[u0,v0],[u0,v1],[u1,v0]);pushTri(earthPos,earthUv,p1,p3,p2,[u0,v1],[u1,v1],[u1,v0]);}
+
+    // Exposed soil begins under the grassy shoulder and fans out to the toe.
+    for(let s=6;s<9;s++){
+      pushQuadAsTris(earthPos,earthUv,a[s],a[s+1],d[s],d[s+1],[u0,(s-6)/3],[u0,(s-5)/3],[u1,(s-6)/3],[u1,(s-5)/3],((i+s)&1)!==0);
     }
+
+    // Soft undercut shadow directly below the sod edge gives depth without a black outline.
+    const p0=a[6],p1=d[6];
+    shadowPos.push(
+      ...p0, p0[0],p0[1]-.075,p0[2]+.012, ...p1,
+      p0[0],p0[1]-.075,p0[2]+.012, p1[0],p1[1]-.075,p1[2]+.012, ...p1,
+    );
   }
 
-  // Ends feather down instead of terminating in rectangular end caps.
+  const turf=new THREE.BufferGeometry();turf.setAttribute('position',new THREE.Float32BufferAttribute(turfPos,3));turf.setAttribute('uv',new THREE.Float32BufferAttribute(turfUv,2));turf.computeVertexNormals();
+  addTriangleColors(turf,['#ffffff','#f6fbef','#edf7e4','#f8fff1'],seed+1103);
+
   const earth=new THREE.BufferGeometry();earth.setAttribute('position',new THREE.Float32BufferAttribute(earthPos,3));earth.setAttribute('uv',new THREE.Float32BufferAttribute(earthUv,2));earth.computeVertexNormals();
-  addTriangleColors(earth,['#f4eee8','#eee5dc','#f8f2ec','#e8ded4','#f1e9e0'],seed+1701);
-  const grass=new THREE.BufferGeometry();grass.setAttribute('position',new THREE.Float32BufferAttribute(grassPos,3));grass.setAttribute('uv',new THREE.Float32BufferAttribute(grassUv,2));grass.computeVertexNormals();
-  addTriangleColors(grass,['#ffffff','#f4faed','#eef7e6','#f8fff3'],seed+1901);
-  return {earth,grass,rows};
+  addTriangleColors(earth,['#ffffff','#f3eee5','#eae3d7','#f8f3ea','#eee6da'],seed+1307);
+
+  const shadow=new THREE.BufferGeometry();shadow.setAttribute('position',new THREE.Float32BufferAttribute(shadowPos,3));shadow.computeVertexNormals();
+  return {turf,earth,shadow,rows};
 }
 
-function makeFringeGeometry(seed){
+function makeTuftGeometry(seed){
   const rand=seededRandom(seed),positions=[],indices=[];let base=0;
-  for(let blade=0;blade<9;blade++){
-    const x=(rand()-.5)*.38,z=(rand()-.5)*.075,h=.11+rand()*.20,w=.016+rand()*.020,lean=(rand()-.5)*.09;
-    const pts=[[x-w,0,z],[x+w,0,z],[x-w*.72,h*.46,z+lean*.35],[x+w*.72,h*.46,z+lean*.35],[x,h,z+lean]];
-    positions.push(...pts.flat());indices.push(base,base+1,base+2,base+1,base+3,base+2,base+2,base+3,base+4);base+=5;
+  // Broad opaque anime blades. These are intentionally chunky enough to read at player height.
+  for(let blade=0;blade<7;blade++){
+    const a=(blade/7)*Math.PI*2+(rand()-.5)*.35,r=.035+rand()*.055;
+    const x=Math.cos(a)*r,z=Math.sin(a)*r,h=.14+rand()*.18,w=.028+rand()*.030;
+    const leanX=Math.cos(a)*(.035+rand()*.07),leanZ=Math.sin(a)*(.035+rand()*.07);
+    positions.push(
+      x-w,0,z,
+      x+w,0,z,
+      x-w*.65,h*.55,z+leanZ*.45,
+      x+w*.65,h*.55,z+leanZ*.45,
+      x+leanX,h,z+leanZ,
+    );
+    indices.push(base,base+1,base+2, base+1,base+3,base+2, base+2,base+3,base+4);
+    base+=5;
   }
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setIndex(indices);g.computeVertexNormals();return g;
 }
 
-function makeLipShadowGeometry(rows){
-  const p=[];
-  for(let i=0;i<rows.length-1;i++){
-    const a=rows[i][5],b=rows[i+1][5],a2=[a[0],a[1]-.055,a[2]+.012],b2=[b[0],b[1]-.055,b[2]+.012];
-    p.push(...a,...a2,...b,...a2,...b2,...b);
-  }
-  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.computeVertexNormals();return g;
-}
-
 function buildLedges(root,mats){
   const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
-  const earthTex=makeEarthTexture(),turfTex=makeTurfTexture();
-  const earth=mats.dirt.clone();earth.name='route-1-ledge-earth-finished';earth.map=earthTex;earth.color.set('#b97f58');earth.vertexColors=true;earth.flatShading=true;earth.userData.route1LedgeMaterial=true;earth.needsUpdate=true;
-  const turf=mats.grass.clone();turf.name='route-1-ledge-turf-finished';turf.map=turfTex;turf.color.set('#83b954');turf.vertexColors=true;turf.flatShading=true;turf.userData.route1LedgeMaterial=true;turf.needsUpdate=true;
-  const lip=mats.soil.clone();lip.name='route-1-ledge-lip-shadow';lip.color.set('#6f573b');lip.userData.route1LedgeMaterial=true;
-  const fringeMat=mats.blade.clone();fringeMat.name='route-1-ledge-fringe';fringeMat.color.set('#6fa849');fringeMat.side=THREE.DoubleSide;fringeMat.userData.route1LedgeMaterial=true;
-  const fringeGeos=[makeFringeGeometry(811),makeFringeGeometry(812),makeFringeGeometry(813)];
+  const earthTex=makeEarthTextures(),turfTex=makeTurfTextures();
+
+  // Keep material colours white: the texture colours are authored directly and should not be multiplied into red/dark mush.
+  const earth=mats.dirt.clone();
+  earth.name='route-1-ledge-earth';earth.map=earthTex.color;earth.bumpMap=earthTex.bump;earth.bumpScale=.045;earth.color.set('#ffffff');earth.vertexColors=true;earth.flatShading=true;earth.userData.route1LedgeMaterial=true;earth.needsUpdate=true;
+
+  const turf=mats.grass.clone();
+  turf.name='route-1-ledge-turf';turf.map=turfTex.color;turf.bumpMap=turfTex.bump;turf.bumpScale=.025;turf.color.set('#ffffff');turf.vertexColors=true;turf.flatShading=true;turf.userData.route1LedgeMaterial=true;turf.needsUpdate=true;
+
+  const undercut=mats.soil.clone();undercut.name='route-1-ledge-undercut';undercut.color.set('#6f6044');undercut.userData.route1LedgeMaterial=true;
+  const tuftMat=mats.blade.clone();tuftMat.name='route-1-ledge-tufts';tuftMat.color.set('#699d46');tuftMat.side=THREE.DoubleSide;tuftMat.userData.route1LedgeMaterial=true;
+  const tuftLight=mats.bladeLight.clone();tuftLight.name='route-1-ledge-tufts-light';tuftLight.color.set('#91bf58');tuftLight.side=THREE.DoubleSide;tuftLight.userData.route1LedgeMaterial=true;
+  const tuftGeos=[makeTuftGeometry(1601),makeTuftGeometry(1602),makeTuftGeometry(1603)];
 
   LEDGE_RUNS.forEach(([r,c0,c1],index)=>{
     const width=(c1-c0+1)*2,left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.10;
-    const seed=9300+r*47+c0*31+index,geo=makeBankGeometry(width,seed);
-    const earthMesh=new THREE.Mesh(geo.earth,earth);earthMesh.name='route-1-finished-ledge-earth';earthMesh.position.set(x,0,z);earthMesh.castShadow=true;earthMesh.receiveShadow=true;group.add(earthMesh);
-    const turfMesh=new THREE.Mesh(geo.grass,turf);turfMesh.name='route-1-finished-ledge-turf';turfMesh.position.set(x,0,z);turfMesh.receiveShadow=true;group.add(turfMesh);
-    const lipMesh=new THREE.Mesh(makeLipShadowGeometry(geo.rows),lip);lipMesh.name='route-1-ledge-lip-shadow';lipMesh.position.set(x,0,z);group.add(lipMesh);
+    const seed=11000+r*53+c0*37+index,geo=makeLedgeGeometry(width,seed);
 
-    // Real blade clusters break up the crest; they are intermittent, not a green strip.
-    const rand=seededRandom(seed+401),sets=[[],[],[]],count=Math.max(2,Math.floor(width/.72));
+    const soil=new THREE.Mesh(geo.earth,earth);soil.name='route-1-ledged-soil';soil.position.set(x,0,z);soil.castShadow=true;soil.receiveShadow=true;group.add(soil);
+    const grass=new THREE.Mesh(geo.turf,turf);grass.name='route-1-ledged-turf';grass.position.set(x,0,z);grass.receiveShadow=true;group.add(grass);
+    const shadow=new THREE.Mesh(geo.shadow,undercut);shadow.name='route-1-ledged-undercut';shadow.position.set(x,0,z);group.add(shadow);
+
+    // Dense, broad tufts sit in the turf near the crest; no sparse glass-like needles.
+    const rand=seededRandom(seed+701),sets=[[],[],[]],lightSets=[[],[],[]];
+    const count=Math.max(5,Math.floor(width/.42));
     for(let i=0;i<count;i++){
-      if(rand()<.22)continue;
-      const t=(i+.5)/count,rx=-width/2+t*width+(rand()-.5)*.22;
-      const rowIndex=Math.min(geo.rows.length-1,Math.max(0,Math.round(t*(geo.rows.length-1)))),crown=geo.rows[rowIndex][4],variant=Math.floor(rand()*3);
-      sets[variant].push({position:[x+rx,crown[1]-.012,z+crown[2]-.015],rotation:[0,rand()*Math.PI*2,0],scale:[.78+rand()*.40,.78+rand()*.48,.78+rand()*.40]});
+      const t=(i+.35+rand()*.30)/count,localX=-width/2+t*width+(rand()-.5)*.12;
+      const ri=Math.min(geo.rows.length-1,Math.max(0,Math.round(t*(geo.rows.length-1)))),crest=geo.rows[ri][4];
+      const target=rand()>.72?lightSets:sets,variant=Math.floor(rand()*3);
+      target[variant].push({position:[x+localX,crest[1]-.005,z+crest[2]-.06+(rand()-.5)*.06],rotation:[0,rand()*Math.PI*2,0],scale:[.82+rand()*.28,.78+rand()*.38,.82+rand()*.28]});
     }
-    fringeGeos.forEach((g,i)=>{if(sets[i].length)group.add(instanceSet(g,fringeMat,sets[i],`route-1-ledge-fringe-${index}-${i}`,false));});
+    tuftGeos.forEach((g,i)=>{
+      if(sets[i].length)group.add(instanceSet(g,tuftMat,sets[i],`route-1-ledge-tufts-${index}-${i}`,false));
+      if(lightSets[i].length)group.add(instanceSet(g,tuftLight,lightSets[i],`route-1-ledge-tufts-light-${index}-${i}`,false));
+    });
   });
 }
 
