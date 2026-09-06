@@ -13,7 +13,10 @@ import { exteriorDoorColliders } from './interiors/layout.js';
 export function createPalletTown(scene) {
   const mats=makeMaterials(),colliders=[];
   scene.background=new THREE.Color('#bfdece');
-  scene.fog=new THREE.Fog('#bfdece',46,145);
+  // Pallet's original town-scale fog began at 46 m. The connected Route 1 world
+  // now extends ~90 m north, so keep the haze atmospheric rather than using it
+  // as the old town boundary.
+  scene.fog=new THREE.Fog('#bfdece',95,240);
   const ambient=new THREE.HemisphereLight('#e9f5ec','#688143',1.1);ambient.name='sky-fill';scene.add(ambient);
   const sun=new THREE.DirectionalLight('#fff0cf',2.65);sun.name='afternoon-sun';sun.position.set(-25,42,26);sun.target.position.set(0,0,-30);
   sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
@@ -21,7 +24,9 @@ export function createPalletTown(scene) {
   sun.shadow.normalBias=.04;sun.shadow.bias=-.00012;sun.shadow.radius=2;
   scene.add(sun,sun.target);
   const landscape=makeLandscape(scene,mats,PALLET_TOWN);
-  makeTrees(scene,mats,colliders);makeGardensAndGrass(scene,mats,PALLET_TOWN);makeSky(scene,mats);
+  makeTrees(scene,mats,colliders);makeGardensAndGrass(scene,mats,PALLET_TOWN);
+  const sky=makeSky(scene,mats);
+  extendDistantHorizon(sky);
   prunePalletRouteBackdrop(scene,colliders);
   const route1=makeRoute1(scene,mats,colliders);
   const buildings=new Map();
@@ -49,6 +54,19 @@ export function createPalletTown(scene) {
   colliders.push({kind:'box',id:'northern-border-east',minX:2.0,maxX:100,minZ:-17.2,maxZ:-15.35});
   colliders.push({kind:'box',id:'water',minX:-12.3,maxX:-3.7,minZ:9.95,maxZ:100});
   return {layout:PALLET_TOWN,colliders,buildings,route1,sun,materials:mats,update:landscape.update};
+}
+
+// The original Pallet-only scene placed its fake mountain horizon just 70–95 m
+// from the origin. Route 1 now physically occupies that same distance. Uniformly
+// moving the merged horizon farther out preserves its apparent size from town
+// while stopping the playable route from running into opaque backdrop geometry.
+function extendDistantHorizon(root) {
+  const hills=root?.getObjectByName('sky-and-distant-hills:mountain');
+  if(!hills)return;
+  hills.scale.setScalar(2.4);
+  hills.renderOrder=-5;
+  hills.material=hills.material.clone();
+  hills.material.depthWrite=false;
 }
 
 function createSign(spec,mats) {
