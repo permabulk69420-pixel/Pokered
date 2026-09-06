@@ -1,6 +1,17 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Builder } from '../geometry.js';
 import { artwork } from './materials.js';
+
+const starterPokeballLoader=new GLTFLoader();
+let starterPokeballPromise=null;
+function loadStarterPokeball(){
+  if(!starterPokeballPromise){
+    const url=new URL('assets/pokeball/pokeball_animated_open_no_blue.glb',document.baseURI);
+    starterPokeballPromise=starterPokeballLoader.loadAsync(url.href);
+  }
+  return starterPokeballPromise;
+}
 
 export function prop(parent,mats,id,x,y,z,draw,yaw=0) {
   const root=new THREE.Group();root.name=id;root.position.set(x,y,z);root.rotation.y=yaw;
@@ -122,13 +133,30 @@ export function bed(b) {
 }
 
 export function pokeball(b,x,y,z) {
-  const r=.112;
-  const top=new THREE.SphereGeometry(r,20,10,0,Math.PI*2,0,Math.PI/2);
-  const bottom=new THREE.SphereGeometry(r,20,10,0,Math.PI*2,Math.PI/2,Math.PI/2);
-  b.add(top,'red',[x,y,z]);b.add(bottom,'paper',[x,y,z]);top.dispose();bottom.dispose();
-  b.cylinder(r+.001,r+.001,.015,x,y,z,'screenEdge',20);
-  b.cylinder(.034,.034,.013,x,y,z+r,'screenEdge',14,[Math.PI/2,0,0]);
-  b.cylinder(.021,.021,.015,x,y,z+r+.008,'paper',12,[Math.PI/2,0,0]);
+  const mount=new THREE.Group();
+  mount.name='starter-pokeball';
+  mount.position.set(x,0,z);
+  b.group.add(mount);
+
+  loadStarterPokeball().then(gltf=>{
+    const ball=gltf.scene.clone(true);
+    ball.name='starter-pokeball-model';
+    // The authored model has its red/white split vertical. Rotate it so red is
+    // on top, white is on the bottom, while the button still faces +Z.
+    ball.rotation.z=Math.PI/2;
+    ball.updateMatrixWorld(true);
+
+    // The old 22.4 cm procedural ball was centred at y with a .112 m radius.
+    // Preserve its exact support height, but seat this much smaller real model
+    // using the model's measured lower bound so it neither floats nor sinks.
+    const supportY=y-.112;
+    const bounds=new THREE.Box3().setFromObject(ball);
+    ball.position.y+=supportY-bounds.min.y;
+    ball.traverse(object=>{
+      if(object.isMesh){object.castShadow=false;object.receiveShadow=true;object.frustumCulled=true;}
+    });
+    mount.add(ball);
+  }).catch(error=>console.warn('Could not load Oak Lab starter Poké Ball.',error));
 }
 
 export function pokedex(b,x,z) {
