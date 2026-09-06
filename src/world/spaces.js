@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createPalletTown } from './pallet-town.js';
 import { createInterior } from './interiors/rooms.js';
+import { upgradeRedHouseWindows } from './interiors/red-windows.js';
 import { INTERIORS, entranceAt, atInteriorExit, interiorArrival, exteriorArrival } from './interiors/layout.js';
 
 // Spaces share the same metre-based coordinates and player rig. Only the active
@@ -15,7 +16,9 @@ export class WorldSpaces {
       background:townRoot.background,fog:townRoot.fog,
     }]]);
     for(const id of Object.keys(INTERIORS)){
-      const room=createInterior(id);room.root.visible=false;scene.add(room.root);this.spaces.set(id,room);
+      const room=createInterior(id);
+      if(id==='reds-house')upgradeRedHouseWindows(room);
+      room.root.visible=false;scene.add(room.root);this.spaces.set(id,room);
     }
     this.activate('pallet-town');
   }
