@@ -6,6 +6,8 @@ const GRAB_RADIUS=.22;
 const HOLSTER_RELEASE_RADIUS=.24;
 const GRAB_ON=.45;
 const GRAB_OFF=.22;
+const HELD_GRIP_AMOUNT=.32;
+const HELD_OFFSET=Object.freeze([0,-.012,-.088]);
 
 export async function setupPokeball({renderer,rig,states}) {
   const scene=rig.parent;
@@ -66,7 +68,12 @@ export async function setupPokeball({renderer,rig,states}) {
     holster.rotation.set(0,0,0);
   }
 
+  function clearHeldPose(){
+    if(heldState)heldState.poseOverride=null;
+  }
+
   function holsterBall(){
+    clearHeldPose();
     mode='holstered';heldState=null;velocity.set(0,0,0);spin.set(0,0,0);
     closeBall();
     holster.attach(ball);
@@ -76,16 +83,20 @@ export async function setupPokeball({renderer,rig,states}) {
   }
 
   function holdBall(state){
+    clearHeldPose();
     mode='held';heldState=state;velocity.set(0,0,0);spin.set(0,0,0);
     closeBall();
+    state.poseOverride={name:'Grip',amount:HELD_GRIP_AMOUNT};
     state.grip.attach(ball);
-    // Nestle the 10 cm ball into the palm rather than at the controller origin.
-    ball.position.set(0,-.018,-.052);
+    // Keep the sphere outside the palm: its near surface sits at the fingers/palm
+    // instead of burying the centre of the ball inside the hand mesh.
+    ball.position.fromArray(HELD_OFFSET);
     ball.rotation.set(0,0,0);
     ball.scale.setScalar(1);
   }
 
   function releaseBall(sample){
+    clearHeldPose();
     scene.attach(ball);
     ball.updateMatrixWorld(true);
     holster.getWorldPosition(tmp);
