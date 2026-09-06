@@ -26,6 +26,30 @@ renderer.xr.enabled=true;renderer.xr.setReferenceSpaceType('local-floor');render
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.06,450),rig=new THREE.Group();
 rig.name='player-rig';camera.name='player-head';rig.add(camera);scene.add(rig);
 const spaces=new WorldSpaces(scene,{onChange:()=>{renderer.shadowMap.needsUpdate=true;}}),town=spaces.town;
+const outdoorRoot=spaces.spaces.get('pallet-town').root;
+const routeRoot=town.route1.root,viridianRoot=town.viridian.root;
+const landscapeRoot=outdoorRoot.getObjectByName('landscape'),skyRoot=outdoorRoot.getObjectByName('sky-and-distant-hills'),ambientRoot=outdoorRoot.getObjectByName('sky-fill');
+const alwaysOutdoor=new Set([routeRoot,viridianRoot,landscapeRoot,skyRoot,ambientRoot,town.sun,town.sun.target]);
+const palletVisuals=outdoorRoot.children.filter(child=>!alwaysOutdoor.has(child));
+const OUTDOOR_FOG_NEAR=48,OUTDOOR_FOG_FAR=82,OUTDOOR_CULL_DISTANCE=86;
+if(outdoorRoot.fog?.isFog){outdoorRoot.fog.near=OUTDOOR_FOG_NEAR;outdoorRoot.fog.far=OUTDOOR_FOG_FAR;}
+const outdoorRanges=[
+  {objects:palletVisuals,minZ:-35,maxZ:35},
+  {objects:[routeRoot],minZ:-90,maxZ:-18},
+  {objects:[viridianRoot],minZ:-174,maxZ:-90},
+];
+function distanceToZRange(z,minZ,maxZ){return z<minZ?minZ-z:z>maxZ?z-maxZ:0;}
+function updateOutdoorVisibility(z){
+  let changed=false;
+  for(const range of outdoorRanges){
+    const visible=distanceToZRange(z,range.minZ,range.maxZ)<=OUTDOOR_CULL_DISTANCE;
+    for(const object of range.objects){
+      if(object.visible===visible)continue;
+      object.visible=visible;changed=true;
+    }
+  }
+  return changed;
+}
 const transition=new DoorwayTransition(camera);
 const clock=new THREE.Clock();let elapsed=0,mode='overview',toastTimer,statsTime=0,lastBoundary=0,session=null,returnPose=null,handSystem=null;
 const overviewPosition=startInViridian?new THREE.Vector3(-45,48,-66):new THREE.Vector3(-30,24,34),overviewTarget=startInViridian?new THREE.Vector3(1,0,-129):new THREE.Vector3(0,0,-1.5);
@@ -152,6 +176,7 @@ renderer.setAnimationLoop(()=> {
   spaces.update(elapsed);
   if(spaces.active==='pallet-town'){
     const z=renderer.xr.isPresenting||mode==='walk'?rig.position.z:(startInViridian||params.get('view')?.startsWith('viridian'))?-127:camera.position.z;
+    if(updateOutdoorVisibility(z))renderer.shadowMap.needsUpdate=true;
     const region=z< -85?'viridian':z< -27?'route':'pallet';
     const locationName=region==='viridian'?'VIRIDIAN CITY':region==='route'?'ROUTE 1':'PALLET TOWN';
     const locationLabel=document.querySelector('#location-name');if(locationLabel.textContent!==locationName)locationLabel.textContent=locationName;
