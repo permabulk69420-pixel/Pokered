@@ -2,22 +2,21 @@ import * as THREE from 'three';
 import { Builder, instanceSet } from './geometry.js';
 import { seededRandom } from './materials.js';
 
-// Generation I Route 1, decoded from pret/pokered maps/Route1.blk with the
-// original overworld blockset. The source map is 10×18 blocks = 20×36 movement
-// tiles. In this remaster one 8 px graphics tile is one metre, preserving the
-// same 40×72 m footprint and aligning its south edge with Pallet Town.
+// Generation I Route 1. The source map is 10×18 blocks = 20×36 movement
+// tiles. One movement tile is two metres in this VR remaster, so Route 1 keeps
+// the original 40×72 m footprint and joins Pallet Town at its north opening.
 export const ROUTE_1 = {
   id: 'route-1',
   width: 40,
   depth: 72,
   southZ: -18,
   northZ: -90,
-  // Canonical sign object: movement tile (9,27).
+  // Original sign object at movement tile (9,27).
   sign: {x:-1,z:-35},
 };
 
-// Exact $39 path-tile coverage, collapsed into rectangles after decoding the
-// original block map. [x,z,width,depth] in world metres.
+// Exact clear-path coverage recovered from the rendered Gen I Route 1 map.
+// [x,z,width,depth] in metres.
 const PATH_RECTS = [
   [2,-86,4,8], [8,-80.5,16,3], [12,-78.5,8,1], [10,-68,12,4],
   [4.5,-64.5,1,1], [6,-60,4,4], [0,-56,16,4], [-6,-52.5,4,3],
@@ -25,15 +24,15 @@ const PATH_RECTS = [
   [8,-35.5,16,1], [-7,-35.5,10,1], [-5,-34.5,6,1], [2,-30,4,8],
 ];
 
-// Exact $52 encounter-grass coverage from the original overworld tileset.
+// Exact encounter-grass coverage from the original map.
 const GRASS_RECTS = [
   [8,-74,16,8], [12,-62,8,8], [8,-42,8,8],
   [12,-32,8,4], [-4,-32,8,4], [8,-28,8,4], [-8,-28,8,4],
   [2,-22,4,8],
 ];
 
-// Each entry is the start of an original three-graphics-tile horizontal ledge.
-// These are visual for now; the future locomotion pass can add one-way drops.
+// Thirteen individual ledge segments. Several sit side-by-side, which is why
+// the original route reads visually as fewer long ledge rows.
 const LEDGES = [
   [13.5,-85.5], [-10.5,-77.5], [-6.5,-77.5], [-6.5,-69.5],
   [-2.5,-69.5], [-2.5,-61.5], [1.5,-61.5], [9.5,-57.5],
@@ -41,15 +40,47 @@ const LEDGES = [
   [13.5,-29.5],
 ];
 
-// Full tree motifs recovered directly from the original block graphics. Dense
-// boundary rows are added below so the 3D forest reads as a continuous wall in VR.
-const SOURCE_TREE_CENTERS = [
-  [-14.5,-88.5],[-2.5,-88.5],[-14.5,-84.5],[-14.5,-80.5],[-2.5,-80.5],
-  [-14.5,-76.5],[-2.5,-76.5],[-14.5,-72.5],[-2.5,-72.5],[-14.5,-68.5],
-  [4.5,-63.5],[6.5,-63.5],[-14.5,-64.5],[-14.5,-60.5],[-14.5,-56.5],
-  [-14.5,-52.5],[-14.5,-48.5],[-14.5,-44.5],[-14.5,-40.5],[-14.5,-36.5],
-  [-14.5,-32.5],[-14.5,-28.5],[-14.5,-24.5],[-10.5,-24.5],[-6.5,-24.5],
-  [-2.5,-24.5],[5.5,-24.5],[9.5,-24.5],[13.5,-24.5],[-14.5,-20.5],[-2.5,-20.5],
+// Canonical forest/obstacle silhouette traced from the full rendered R/B/Y map,
+// not inferred from isolated tree sprites. Each character is one original
+// movement tile (2 m here), north at row 0 and south at row 35. This preserves
+// the characteristic horizontal forest bands and S-shaped Route 1 corridors.
+const TREE_MASK = [
+  '..##....##..##....##',
+  '..########..########',
+  '..##..............##',
+  '..##............####',
+  '..##....##........##',
+  '..############....##',
+  '..##....##........##',
+  '..########........##',
+  '..##....##........##',
+  '..########........##',
+  '..##..............##',
+  '..##..####........##',
+  '..####....####....##',
+  '..############....##',
+  '..##..............##',
+  '..##....####......##',
+  '..##..............##',
+  '..##..........######',
+  '..##..............##',
+  '..##################',
+  '..##..............##',
+  '..##..............##',
+  '..##########......##',
+  '..##########....####',
+  '..##..............##',
+  '..##....####......##',
+  '..##..............##',
+  '..####....##########',
+  '..##..............##',
+  '..##..............##',
+  '..##..............##',
+  '..##....##......####',
+  '..########..########',
+  '..########..########',
+  '..##....##..##....##',
+  '..##....##..##....##',
 ];
 
 function createRouteSign(mats) {
@@ -74,46 +105,42 @@ function createRouteSign(mats) {
 }
 
 function treeSet(root,mats,colliders) {
-  const rand=seededRandom(101),positions=[];
-  const add=(x,z,collide=true)=>positions.push({x,z,collide});
-  const seen=new Set();
-  const canonical=(x,z,collide=true)=>{
+  const rand=seededRandom(101),positions=[],seen=new Set();
+  const add=(x,z,collide=true)=>{
     const key=`${Math.round(x*10)}/${Math.round(z*10)}`;
-    if(seen.has(key))return;seen.add(key);add(x,z,collide);
+    if(seen.has(key))return;
+    seen.add(key);positions.push({x,z,collide});
   };
 
-  // Original recovered centres first.
-  for(const [x,z] of SOURCE_TREE_CENTERS)canonical(x,z,true);
-
-  // The original map uses stitched half-tree graphics along these borders. In
-  // 3D they become dense rows of the same trees already used around Pallet.
-  for(let z=-88.5;z<=-19.5;z+=2.05){canonical(-14.6,z,true);canonical(18.6,z,true);}
-
-  // Northern map edge: retain the original narrow Viridian exit at x≈2 m.
-  for(let x=-13.5;x<=17.5;x+=2.05)if(x<.1||x>4.1)canonical(x,-89.2,true);
-
-  // Strong southern tree band visible in the source map, leaving the central
-  // connection back to Pallet open.
-  for(let x=-12.5;x<=14.5;x+=2.05)if(x<-.2||x>4.2)canonical(x,-24.6,true);
-
-  // Central divider in the northern half of the route.
-  for(let z=-82.4;z<=-70.2;z+=2.05)canonical(-2.5,z,true);
-
-  // Outside-only depth layers hide the diorama edge without changing gameplay.
-  for(let z=-91;z<=-18;z+=3.2){
-    canonical(-20.5+(rand()-.5)*.5,z+(rand()-.5)*.5,false);
-    canonical(24.5+(rand()-.5)*.5,z+(rand()-.5)*.5,false);
+  // Convert the exact 20×36 forest silhouette into the same rounded tree style
+  // already used around Pallet Town. Tile centres are 2 m apart.
+  for(let row=0;row<TREE_MASK.length;row++) {
+    const line=TREE_MASK[row];
+    for(let col=0;col<line.length;col++) if(line[col]==='#') {
+      const x=(col-9.5)*2;
+      const z=-89+row*2;
+      add(x,z,true);
+    }
   }
 
-  const trunk=[],lower=[],mid=[],top=[],tuft=[];
+  // Two non-colliding outer rows add forest depth without changing the route.
+  for(let z=-91;z<=-18;z+=3.2) {
+    add(-22.2+(rand()-.5)*.45,z+(rand()-.5)*.45,false);
+    add(22.2+(rand()-.5)*.45,z+(rand()-.5)*.45,false);
+  }
+  for(let x=-18;x<=18;x+=3.1) if(x<-.2||x>4.2)
+    add(x+(rand()-.5)*.35,-93+(rand()-.5)*.35,false);
+
+  const trunk=[],lower=[],mid=[],top=[],tuft=[],shadows=[];
   for(const p of positions){
-    const s=.94+rand()*.16,yy=rand()*.14,rot=rand()*Math.PI*2;
+    const s=.92+rand()*.14,yy=rand()*.12,rot=rand()*Math.PI*2;
     trunk.push({position:[p.x,.85*s,p.z],scale:[s,s,s]});
     lower.push({position:[p.x,2.05*s+yy,p.z],scale:[1.13*s,1.05*s,1.01*s],rotation:[0,rot,0]});
     mid.push({position:[p.x+.05,2.78*s+yy,p.z+.02],scale:[.94*s,.96*s,.88*s],rotation:[0,rot+.8,0]});
     top.push({position:[p.x-.07,3.39*s+yy,p.z],scale:[.64*s,.72*s,.62*s],rotation:[0,rot,0]});
     tuft.push({position:[p.x-.54*s,2.62*s+yy,p.z+.65*s],scale:[.54*s,.51*s,.51*s],rotation:[0,rot,0]});
-    if(p.collide)colliders.push({kind:'circle',id:'route-1-tree',x:p.x,z:p.z,r:.82});
+    if(p.collide)colliders.push({kind:'circle',id:'route-1-tree',x:p.x,z:p.z,r:.78});
+    shadows.push({position:[p.x,.028,p.z],scale:[1.08*s,1.08*s,1],rotation:[-Math.PI/2,0,0]});
   }
   const crown=new THREE.IcosahedronGeometry(1,1);
   root.add(instanceSet(new THREE.CylinderGeometry(.14,.24,1.8,7),mats.trunk,trunk,'route-1-tree-trunks'));
@@ -121,11 +148,18 @@ function treeSet(root,mats,colliders) {
   root.add(instanceSet(crown,mats.leaf,mid,'route-1-tree-middle'));
   root.add(instanceSet(crown,mats.leafLight,top,'route-1-tree-top'));
   root.add(instanceSet(crown,mats.leaf,tuft,'route-1-tree-lobes'));
+
+  // Same cheap contact-shadow treatment as Pallet so the denser forest walls
+  // still sit naturally on the meadow instead of looking like floating props.
+  const shadowTex=document.createElement('canvas');shadowTex.width=shadowTex.height=64;
+  const c=shadowTex.getContext('2d');const gr=c.createRadialGradient(32,32,4,32,32,32);
+  gr.addColorStop(0,'rgba(32,56,21,.26)');gr.addColorStop(.6,'rgba(32,56,21,.10)');gr.addColorStop(1,'rgba(32,56,21,0)');
+  c.fillStyle=gr;c.fillRect(0,0,64,64);
+  const sm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(shadowTex),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
+  root.add(instanceSet(new THREE.PlaneGeometry(2,2),sm,shadows,'route-1-tree-contact-shadows',false));
 }
 
 function tallGrass(root,mats) {
-  // Same six-triangle grass construction used in Pallet Town, but placed from
-  // the canonical $52 tiles rather than scattered procedurally.
   const geom=new THREE.BufferGeometry(),v=[];
   for(let k=0;k<3;k++){
     const a=k*Math.PI/3,dx=Math.cos(a)*.055,dz=Math.sin(a)*.055;
@@ -147,8 +181,7 @@ function tallGrass(root,mats) {
 export function makeRoute1(scene,mats,colliders) {
   const root=new THREE.Group();root.name='route-1';scene.add(root);
 
-  // The meadow underneath already continues north from Pallet. Lay the exact
-  // Gen I worn-road footprint over it with the existing Pallet material family.
+  // Lay the original clear route footprint over the continuous Pallet meadow.
   const trail=mats.path.clone();trail.name='route-1-path';trail.color.set('#b9be7e');
   const pathRoot=new THREE.Group();pathRoot.name='route-1-original-path';root.add(pathRoot);
   const pb=new Builder(pathRoot,mats);
@@ -158,8 +191,6 @@ export function makeRoute1(scene,mats,colliders) {
   tallGrass(root,mats);
   treeSet(root,mats,colliders);
 
-  // Low earth lips mark every one-way ledge in the original map. They remain
-  // non-colliding until the VR locomotion pass can support directional drops.
   const ledges=new THREE.Group();ledges.name='route-1-ledges';root.add(ledges);const lb=new Builder(ledges,mats);
   for(const [x,z] of LEDGES){
     lb.roundBox(3.05,.22,.46,.05,x,.11,z,'soil');
@@ -171,11 +202,11 @@ export function makeRoute1(scene,mats,colliders) {
   const sign=createRouteSign(mats);sign.position.set(ROUTE_1.sign.x,0,ROUTE_1.sign.z);root.add(sign);
   colliders.push({kind:'box',id:'route-1-sign',minX:-2.05,maxX:.05,minZ:-35.18,maxZ:-34.82});
 
-  // Keep players inside the canonical route footprint and stop at the not-yet-
-  // built Viridian transition. These sit behind visible tree walls.
-  colliders.push({kind:'box',id:'route-1-west-boundary',minX:-100,maxX:-15.35,minZ:-92,maxZ:-17.15});
-  colliders.push({kind:'box',id:'route-1-east-boundary',minX:19.35,maxX:100,minZ:-92,maxZ:-17.15});
-  colliders.push({kind:'box',id:'route-1-viridian-limit',minX:-15.4,maxX:19.4,minZ:-100,maxZ:-90.8});
+  // Hard outer bounds only. Internal route shape is now defined by the exact
+  // forest-mask tree colliders rather than guessed invisible walls.
+  colliders.push({kind:'box',id:'route-1-west-boundary',minX:-100,maxX:-19.65,minZ:-94,maxZ:-17.15});
+  colliders.push({kind:'box',id:'route-1-east-boundary',minX:19.65,maxX:100,minZ:-94,maxZ:-17.15});
+  colliders.push({kind:'box',id:'route-1-viridian-limit',minX:-20,maxX:20,minZ:-100,maxZ:-91.6});
 
   return {root,layout:ROUTE_1,grass:GRASS_RECTS,ledges:LEDGES};
 }
