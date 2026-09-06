@@ -40,9 +40,11 @@ jobs:
           fi
 
           pokeball='public/assets/pokeball/pokeball_animated_open_no_blue.glb'
-          import='.pokeball-import/pokeball.glb.gz.b64'
-          if [ ! -f "$pokeball" ] && [ -f "$import" ]; then
-            base64 --decode "$import" | gzip --decompress > "$pokeball"
+          # The uploaded binary is staged as small gzip+base64 chunks because the
+          # GitHub connector only writes UTF-8 text files reliably. gz09 is the
+          # completion marker, so an intermediate push never decodes a partial file.
+          if [ ! -f "$pokeball" ] && [ -f .pokeball-import/gz09 ]; then
+            cat .pokeball-import/gz0* | base64 --decode | gzip --decompress > "$pokeball"
             test "$(head -c 4 "$pokeball")" = 'glTF'
             echo '6ead17252e68fe0edbde405a27349962820db932388966c6ffd04e60b3506525  public/assets/pokeball/pokeball_animated_open_no_blue.glb' | sha256sum --check --strict
             changed=1
@@ -53,8 +55,6 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add public/assets/hands/LeftHand.glb public/assets/hands/RightHand.glb
             if [ -f "$pokeball" ]; then git add "$pokeball"; fi
-            # Temporary upload chunks are only needed until the binary has been
-            # reconstructed once. Remove them from main after a verified decode.
             if [ -f "$pokeball" ] && [ -d .pokeball-import ]; then git rm -r .pokeball-import; fi
             if ! git diff --cached --quiet; then
               git commit -m "Persist runtime VR binary assets"
