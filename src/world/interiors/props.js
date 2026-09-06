@@ -6,8 +6,10 @@ import { artwork } from './materials.js';
 const starterPokeballLoader=new GLTFLoader();
 let starterPokeballPromise=null;
 function loadStarterPokeball(){
+  const base=globalThis.document?.baseURI;
+  if(!base)return Promise.resolve(null);
   if(!starterPokeballPromise){
-    const url=new URL('assets/pokeball/pokeball_animated_open_no_blue.glb',document.baseURI);
+    const url=new URL('assets/pokeball/pokeball_animated_open_no_blue.glb',base);
     starterPokeballPromise=starterPokeballLoader.loadAsync(url.href);
   }
   return starterPokeballPromise;
@@ -139,6 +141,7 @@ export function pokeball(b,x,y,z) {
   b.group.add(mount);
 
   loadStarterPokeball().then(gltf=>{
+    if(!gltf)return;
     const ball=gltf.scene.clone(true);
     ball.name='starter-pokeball-model';
     // The authored model has its red/white split vertical. Rotate it so red is
