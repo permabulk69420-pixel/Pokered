@@ -121,41 +121,78 @@ function flowers(root,mats){
   root.add(instanceSet(new THREE.CylinderGeometry(.012,.016,.20,5),mats.grassShade,stems,'route-1-flower-stems',false));root.add(instanceSet(new THREE.IcosahedronGeometry(.065,0),mats.petalCream,petals,'route-1-flower-petals',false));root.add(instanceSet(new THREE.IcosahedronGeometry(.025,0),mats.flowerCenter,centres,'route-1-flower-centres',false));
 }
 
-function ledgeBankGeometry(width){
-  // Deliberately simple, chunky terrain: mostly vertical dirt face with just
-  // enough taper/bevel that it does not read as a raw primitive box in VR.
-  const profile=new THREE.Shape();
-  profile.moveTo(-.42,.025);
-  profile.lineTo(-.42,.29);
-  profile.lineTo(.38,.29);
-  profile.lineTo(.44,.025);
-  profile.closePath();
-  const g=new THREE.ExtrudeGeometry(profile,{
-    depth:Math.max(.5,width-.08),steps:1,
-    bevelEnabled:true,bevelSegments:1,bevelSize:.025,bevelThickness:.02,curveSegments:1,
-  });
-  // Shape x=>world z, shape y=>world y, extrusion z=>world x.
-  g.rotateY(Math.PI/2);g.translate(-width/2+.04,0,0);g.computeVertexNormals();return g;
+function makeAnimeLedgeGeometry(width,seed){
+  const rand=seededRandom(seed);
+  const steps=Math.max(2,Math.ceil(width/.8));
+  const xs=[],heights=[],fronts=[],backs=[];
+  for(let i=0;i<=steps;i++){
+    const t=i/steps,x=-width/2+t*width;
+    const endEase=Math.sin(Math.PI*t);
+    const wave=Math.sin(t*Math.PI*2+seed*.017)*.018+Math.sin(t*Math.PI*5+seed*.031)*.010;
+    xs.push(x);
+    heights.push(.43+wave+(rand()-.5)*.012*endEase);
+    fronts.push(.25+(rand()-.5)*.025*endEase);
+    backs.push(-.34+(rand()-.5)*.018*endEase);
+  }
+
+  const bodyPos=[],bodyIdx=[];
+  // Cross-section is deliberately soft and graphic: rear shoulder -> crown ->
+  // broad sloped face -> ground. No decorative stones or separate prop pieces.
+  const section=(i)=>{
+    const x=xs[i],h=heights[i],fz=fronts[i],bz=backs[i];
+    return [
+      [x,.015,bz-.17],
+      [x,h*.72,bz-.08],
+      [x,h,bz],
+      [x,h,fz-.07],
+      [x,h*.78,fz+.08],
+      [x,.015,fz+.25],
+    ];
+  };
+  for(let i=0;i<=steps;i++)for(const p of section(i))bodyPos.push(...p);
+  for(let i=0;i<steps;i++){
+    const a=i*6,b=(i+1)*6;
+    for(const [p0,p1] of [[0,1],[1,2],[3,4],[4,5]])bodyIdx.push(a+p0,b+p0,a+p1,a+p1,b+p0,b+p1);
+  }
+  // Close the exposed ends so short ledges still look like terrain chunks.
+  bodyIdx.push(0,1,2,0,2,3,0,3,4,0,4,5);
+  const e=steps*6;bodyIdx.push(e,e+2,e+1,e,e+3,e+2,e,e+4,e+3,e,e+5,e+4);
+  const body=new THREE.BufferGeometry();body.setAttribute('position',new THREE.Float32BufferAttribute(bodyPos,3));body.setIndex(bodyIdx);body.computeVertexNormals();
+
+  const capPos=[],capIdx=[];
+  for(let i=0;i<=steps;i++){
+    const x=xs[i],h=heights[i]+.018;
+    // Grass slightly overhangs both shoulders, giving the clean anime shelf read.
+    capPos.push(x,h,backs[i]-.035,x,h,fronts[i]+.015);
+  }
+  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;capIdx.push(a,b,a+1,a+1,b,b+1);}
+  const cap=new THREE.BufferGeometry();cap.setAttribute('position',new THREE.Float32BufferAttribute(capPos,3));cap.setIndex(capIdx);cap.computeVertexNormals();
+
+  const rimPos=[],rimIdx=[];
+  for(let i=0;i<=steps;i++){
+    const x=xs[i],h=heights[i],fz=fronts[i];
+    rimPos.push(x,h+.015,fz+.018,x,h*.82,fz+.105);
+  }
+  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;rimIdx.push(a,b,a+1,a+1,b,b+1);}
+  const rim=new THREE.BufferGeometry();rim.setAttribute('position',new THREE.Float32BufferAttribute(rimPos,3));rim.setIndex(rimIdx);rim.computeVertexNormals();
+
+  return {body,cap,rim};
 }
 
 function ledges(root,mats){
   const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
-  for(const [r,c0,c1] of LEDGE_RUNS){
+  const earth=mats.soil.clone();earth.name='route-1-anime-earth';earth.color.set('#91724f');
+  const grass=mats.grass.clone();grass.name='route-1-anime-grass-cap';grass.color.set('#7fb653');
+  const grassRim=mats.grassShade.clone();grassRim.name='route-1-anime-grass-rim';grassRim.color.set('#5f9147');
+
+  LEDGE_RUNS.forEach(([r,c0,c1],index)=>{
     const width=(c1-c0+1)*2,left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.70;
+    const geo=makeAnimeLedgeGeometry(width,730+r*29+c0*11+index*7);
 
-    const bank=new THREE.Mesh(ledgeBankGeometry(width),mats.soil);
-    bank.name='route-1-dirt-ledge';bank.position.set(x,0,z);bank.castShadow=true;bank.receiveShadow=true;group.add(bank);
-
-    // Bright grass slab on top: deliberately readable and blocky, like a tiny
-    // Minecraft-style grass bank rather than a rock wall or decorative prop.
-    const cap=new THREE.Mesh(new THREE.BoxGeometry(width+.08,.085,.82),mats.grass);
-    cap.name='route-1-grass-cap';cap.position.set(x,.325,z-.015);cap.castShadow=false;cap.receiveShadow=true;group.add(cap);
-
-    // A darker green front rim makes the grass layer read from standing eye
-    // height without adding pegs, stones, blades, or other visual clutter.
-    const rim=new THREE.Mesh(new THREE.BoxGeometry(width+.04,.075,.055),mats.grassShade);
-    rim.name='route-1-grass-front-rim';rim.position.set(x,.285,z+.405);rim.castShadow=false;group.add(rim);
-  }
+    const body=new THREE.Mesh(geo.body,earth);body.name='route-1-anime-ledge-earth';body.position.set(x,0,z);body.castShadow=true;body.receiveShadow=true;group.add(body);
+    const cap=new THREE.Mesh(geo.cap,grass);cap.name='route-1-anime-ledge-grass';cap.position.set(x,0,z);cap.receiveShadow=true;group.add(cap);
+    const rim=new THREE.Mesh(geo.rim,grassRim);rim.name='route-1-anime-ledge-rim';rim.position.set(x,0,z);rim.receiveShadow=true;group.add(rim);
+  });
 }
 
 export function makeRoute1(scene,mats,colliders){
