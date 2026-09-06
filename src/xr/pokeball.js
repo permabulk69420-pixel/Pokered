@@ -36,7 +36,7 @@ export async function setupPokeball({renderer,rig,states}) {
 
   const tmp=new THREE.Vector3(),ballWorld=new THREE.Vector3(),gripWorld=new THREE.Vector3();
   const velocity=new THREE.Vector3(),spin=new THREE.Vector3();
-  const samples=states.map(()=>({last:new THREE.Vector3(),velocity:new THREE.Vector3(),ready:false,pressed:false}));
+  const samples=states.map(()=>({last:new THREE.Vector3(),velocity:new THREE.Vector3(),ready:false}));
   let mode='holstered',heldState=null,groundY=BALL_RADIUS,opened=false;
 
   function closeBall(){
@@ -110,6 +110,11 @@ export async function setupPokeball({renderer,rig,states}) {
   }
 
   function sampleHands(dt){
+    if(mode==='held'&&heldState&&!heldState.inputSource){
+      holsterBall();
+      return;
+    }
+
     states.forEach((state,index)=>{
       const sample=samples[index],squeeze=state.inputSource?.gamepad?.buttons?.[1]?.value??0;
       state.grip.getWorldPosition(gripWorld);
@@ -121,10 +126,11 @@ export async function setupPokeball({renderer,rig,states}) {
       }
       sample.last.copy(gripWorld);
 
-      const pressed=squeeze>=GRAB_ON;
-      if(!sample.pressed&&pressed&&mode!=='held'&&canGrab(state))holdBall(state);
-      if(mode==='held'&&heldState===state&&sample.pressed&&squeeze<=GRAB_OFF)releaseBall(sample);
-      sample.pressed=pressed;
+      if(mode!=='held'&&squeeze>=GRAB_ON&&canGrab(state)){
+        holdBall(state);
+        return;
+      }
+      if(mode==='held'&&heldState===state&&squeeze<=GRAB_OFF)releaseBall(sample);
     });
   }
 
@@ -150,7 +156,7 @@ export async function setupPokeball({renderer,rig,states}) {
   }
 
   function resetSamples(){
-    for(const sample of samples){sample.ready=false;sample.pressed=false;sample.velocity.set(0,0,0);}
+    for(const sample of samples){sample.ready=false;sample.velocity.set(0,0,0);}
   }
 
   function reset(){
