@@ -7,7 +7,7 @@ const HOLSTER_RELEASE_RADIUS=.24;
 const GRAB_ON=.45;
 const GRAB_OFF=.22;
 
-export async function setupPokeball({rig,states}) {
+export async function setupPokeball({renderer,rig,states}) {
   const scene=rig.parent;
   const camera=rig.children.find(child=>child.isCamera);
   if(!scene||!camera)throw new Error('Poké Ball needs the player scene and camera.');
@@ -61,7 +61,8 @@ export async function setupPokeball({rig,states}) {
   function updateHolster(){
     camera.getWorldPosition(tmp);
     rig.worldToLocal(tmp);
-    holster.position.set(tmp.x+.28,Math.max(.70,tmp.y-.72),tmp.z+.015);
+    // Right hip, slightly forward so the hand can reach it comfortably in VR.
+    holster.position.set(tmp.x+.29,Math.max(.68,tmp.y-.73),tmp.z+.035);
     holster.rotation.set(0,0,0);
   }
 
@@ -78,6 +79,7 @@ export async function setupPokeball({rig,states}) {
     mode='held';heldState=state;velocity.set(0,0,0);spin.set(0,0,0);
     closeBall();
     state.grip.attach(ball);
+    // Nestle the 10 cm ball into the palm rather than at the controller origin.
     ball.position.set(0,-.018,-.052);
     ball.rotation.set(0,0,0);
     ball.scale.setScalar(1);
@@ -92,7 +94,9 @@ export async function setupPokeball({rig,states}) {
       holsterBall();
       return;
     }
-    mode='thrown';heldState=null;groundY=rig.position.y+BALL_RADIUS;
+    mode='thrown';heldState=null;
+    // This game currently has flat outdoor/interior floors for loose-object physics.
+    groundY=rig.position.y+BALL_RADIUS;
     velocity.copy(sample.velocity);
     if(velocity.length()>12)velocity.setLength(12);
     spin.set(velocity.z*2.8,-velocity.x*2.8,(velocity.x-velocity.z)*1.2);
@@ -145,7 +149,20 @@ export async function setupPokeball({rig,states}) {
     if(ball.position.y<rig.position.y-12)holsterBall();
   }
 
+  function resetSamples(){
+    for(const sample of samples){sample.ready=false;sample.pressed=false;sample.velocity.set(0,0,0);}
+  }
+
+  function reset(){
+    resetSamples();
+    holsterBall();
+  }
+
   function update(dt){
+    const xr=renderer.xr.isPresenting;
+    ball.visible=xr;
+    holster.visible=xr;
+    if(!xr)return;
     updateHolster();
     rig.updateMatrixWorld(true);
     sampleHands(dt);
@@ -155,12 +172,17 @@ export async function setupPokeball({rig,states}) {
 
   holster.add(ball);
   holsterBall();
+  ball.visible=false;
+  holster.visible=false;
+
+  renderer.xr.addEventListener('sessionstart',resetSamples);
+  renderer.xr.addEventListener('sessionend',()=>{reset();ball.visible=false;holster.visible=false;});
 
   return {
     root:ball,
     holster,
     update,
+    reset,
     get mode(){return mode;},
-    reset:holsterBall,
   };
 }
