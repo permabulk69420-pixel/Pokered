@@ -144,9 +144,9 @@ export function pokeball(b,x,y,z) {
     if(!gltf)return;
     const ball=gltf.scene.clone(true);
     ball.name='starter-pokeball-model';
-    // The authored model has its red/white split vertical. Rotate it so red is
-    // on top, white is on the bottom, while the button still faces +Z.
-    ball.rotation.z=Math.PI/2;
+    // Keep the model's native orientation: red hemisphere above white with the
+    // black equator horizontal. The previous extra quarter-turn made it vertical.
+    ball.rotation.set(0,0,0);
     ball.updateMatrixWorld(true);
 
     // The old 22.4 cm procedural ball was centred at y with a .112 m radius.
