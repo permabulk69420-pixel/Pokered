@@ -1,5 +1,10 @@
 # Pokered — Kanto VR
 
+**New: outdoor ground and grass polish.** Pallet, Route 1 and Viridian now share
+textured turf with blended path edges. Short grass has softer tapered blades;
+Route 1 keeps its dense animated grass with substantially less geometry.
+See [before/after previews and measured savings](docs/OUTDOOR_POLISH.md).
+
 **New: all five Viridian City interiors**, furnished in the existing Pallet style.
 Walk north from Pallet, or [start in Viridian](https://permabulk69420-pixel.github.io/Pokered/?start=viridian).
 Walk through the open doors to explore the Pokémon Center, Mart, school,

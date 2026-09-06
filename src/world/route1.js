@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Builder, instanceSet } from './geometry.js';
 import { seededRandom } from './materials.js';
+import {buildLedges} from './route1-ledges.js';
 
 export const ROUTE_1 = {
   id: 'route-1', width: 40, depth: 72, southZ: -18, northZ: -90,
@@ -109,30 +110,30 @@ function treeSet(root,mats,colliders){
   root.add(instanceSet(new THREE.PlaneGeometry(2,2),sm,shadows,'route-1-tree-contact-shadows',false));
 }
 
-function buildPath(root,mats){
-  const trail=mats.path.clone();trail.name='route-1-path';trail.color.set('#b9be7e');
-  const pathRoot=new THREE.Group();pathRoot.name='route-1-canonical-path';root.add(pathRoot);
-  const b=new Builder(pathRoot,mats);
+function buildPath(ground){
   for(let r=0;r<36;r++)for(let c=0;c<20;c++)if(PATH_MASK[r][c]==='P'){
-    const [x,z]=cellPos(c,r);b.box(2.04,.018,2.04,x,.022,z,trail);
+    const [x,z]=cellPos(c,r);ground.paint([[x-1,z-1],[x+1,z-1],[x+1,z+1],[x-1,z+1]]);
   }
-  b.finish({shadows:false});
 }
 
 function makeGrassClumpGeometry(seed,bladeCount=12){
   const rand=seededRandom(seed),positions=[],colors=[],indices=[];
   const rootColor=new THREE.Color('#376f38'),midColor=new THREE.Color('#639f46'),tipColor=new THREE.Color('#9bcb62');
-  const segments=6;
+  const segments=3;
   for(let blade=0;blade<bladeCount;blade++){
     const yaw=rand()*Math.PI*2,forward=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw)),side=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
     const radius=Math.sqrt(rand())*.23,rootYaw=rand()*Math.PI*2,rootX=Math.cos(rootYaw)*radius,rootZ=Math.sin(rootYaw)*radius;
-    const height=.62+rand()*.58,baseWidth=.075+rand()*.065,lean=.10+rand()*.28,curl=(rand()-.5)*.15,bladeTone=(rand()-.5)*.10,start=positions.length/3;
-    for(let i=0;i<=segments;i++){
+    const height=.62+rand()*.58,baseWidth=.085+rand()*.070,lean=.10+rand()*.28,curl=(rand()-.5)*.15,bladeTone=(rand()-.5)*.10,start=positions.length/3;
+    for(let i=0;i<segments;i++){
       const t=i/segments,curve=t*t,sideways=Math.sin(t*Math.PI)*curl,cx=rootX+forward.x*lean*curve+side.x*sideways,cz=rootZ+forward.z*lean*curve+side.z*sideways,cy=height*t,halfWidth=baseWidth*.5*Math.pow(1-t,.72)+.003;
       positions.push(cx-side.x*halfWidth,cy,cz-side.z*halfWidth,cx+side.x*halfWidth,cy,cz+side.z*halfWidth);
       const col=new THREE.Color();if(t<.52)col.copy(rootColor).lerp(midColor,t/.52);else col.copy(midColor).lerp(tipColor,(t-.52)/.48);col.offsetHSL(bladeTone*.08,0,bladeTone);colors.push(col.r,col.g,col.b,col.r,col.g,col.b);
     }
-    for(let i=0;i<segments;i++){const a=start+i*2,b=a+2;indices.push(a,b,a+1,a+1,b,b+1);}
+    // One true tip closes the last segment, avoiding a pair of tiny tip triangles.
+    positions.push(rootX+forward.x*lean,height,rootZ+forward.z*lean);
+    const tip=tipColor.clone().offsetHSL(bladeTone*.08,0,bladeTone);colors.push(tip.r,tip.g,tip.b);
+    for(let i=0;i<segments-1;i++){const a=start+i*2,b=a+2;indices.push(a,b,a+1,a+1,b,b+1);}
+    indices.push(start+4,start+6,start+5);
   }
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geometry.setIndex(indices);geometry.computeVertexNormals();geometry.computeBoundingSphere();return geometry;
 }
@@ -154,14 +155,14 @@ function makeGrassMaterial(mats){
 
 function tallGrass(root,mats){
   const grassRoot=new THREE.Group();grassRoot.name='route-1-premium-tall-grass';root.add(grassRoot);
-  const material=makeGrassMaterial(mats),variants=[makeGrassClumpGeometry(3401,11),makeGrassClumpGeometry(3402,13),makeGrassClumpGeometry(3403,12)],transforms=[[],[],[]],rand=seededRandom(52),tints=['#f2fff0','#e9f7df','#fff7d7','#e0f1d7'];
+  const material=makeGrassMaterial(mats),variants=[makeGrassClumpGeometry(3401,9),makeGrassClumpGeometry(3402,11),makeGrassClumpGeometry(3403,10)],transforms=[[],[],[]],rand=seededRandom(52),tints=['#f2fff0','#e9f7df','#fff7d7','#e0f1d7'];
   for(let r=0;r<36;r++)for(let c=0;c<20;c++)if(GRASS_MASK[r][c]==='G'){
     const [cx,cz]=cellPos(c,r);for(let gz=0;gz<5;gz++)for(let gx=0;gx<5;gx++){
       const x=cx-.76+gx*.38+(rand()-.5)*.18,z=cz-.76+gz*.38+(rand()-.5)*.18,variant=Math.floor(rand()*variants.length),heightScale=.82+rand()*.42,widthScale=.88+rand()*.28;
       transforms[variant].push({position:[x,.025,z],rotation:[(rand()-.5)*.055,rand()*Math.PI*2,(rand()-.5)*.055],scale:[widthScale,heightScale,widthScale],color:tints[Math.floor(rand()*tints.length)]});
     }
   }
-  variants.forEach((geometry,i)=>{const mesh=instanceSet(geometry,material,transforms[i],`route-1-curved-grass-${i}`,false);if(mesh.boundingSphere)mesh.boundingSphere.radius+=1.6;mesh.onBeforeRender=()=>{const shader=material.userData.shader;if(shader)shader.uniforms.uGrassTime.value=performance.now()*.001;};grassRoot.add(mesh);});
+  variants.forEach((geometry,i)=>{const mesh=instanceSet(geometry,material,transforms[i],`route-1-curved-grass-${i}`,false);if(mesh.boundingSphere)mesh.boundingSphere.radius+=.4;mesh.userData.windBoundsPadding=.4;mesh.onBeforeRender=()=>{const shader=material.userData.shader;if(shader)shader.uniforms.uGrassTime.value=performance.now()*.001;};grassRoot.add(mesh);});
 }
 
 function flowers(root,mats){
@@ -172,70 +173,10 @@ function flowers(root,mats){
   root.add(instanceSet(new THREE.CylinderGeometry(.012,.016,.20,5),mats.grassShade,stems,'route-1-flower-stems',false));root.add(instanceSet(new THREE.IcosahedronGeometry(.065,0),mats.petalCream,petals,'route-1-flower-petals',false));root.add(instanceSet(new THREE.IcosahedronGeometry(.025,0),mats.flowerCenter,centres,'route-1-flower-centres',false));
 }
 
-function colorTriangles(geometry,palette,seed){
-  const rand=seededRandom(seed),count=geometry.getAttribute('position').count,colors=[];
-  for(let i=0;i<count;i+=3){const col=new THREE.Color(palette[Math.floor(rand()*palette.length)]);for(let v=0;v<3;v++)colors.push(col.r,col.g,col.b);}
-  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
-}
-
-function makeAnimeLedgeGeometry(width,seed){
-  const rand=seededRandom(seed),steps=Math.max(6,Math.ceil(width/.46));
-  const earthPos=[],earthIdx=[],grassPos=[],grassIdx=[];
-
-  for(let i=0;i<=steps;i++){
-    const t=i/steps,x=-width/2+t*width,ease=Math.sin(Math.PI*t);
-    const h=.40+Math.sin(t*Math.PI*2+seed*.013)*.035+(rand()-.5)*.034*ease;
-    const ridgeZ=.005+(rand()-.5)*.038*ease,lipZ=ridgeZ+.045;
-    const midZ=.15+(rand()-.5)*.05*ease,toeZ=.355+(rand()-.5)*.03*ease,midY=h*(.46+(rand()-.5)*.12);
-    const rearZ=-.39+(rand()-.5)*.022*ease,shoulderZ=-.225+(rand()-.5)*.022*ease,crownZ=-.078+(rand()-.5)*.02*ease;
-
-    // Dirt begins below the sod edge, so there is no separate grass pad.
-    earthPos.push(x,h-.075,lipZ, x,midY,midZ, x,.018,toeZ);
-    // One continuous grassy terrain surface, finishing in a narrow front-facing sod edge.
-    grassPos.push(
-      x,.022,rearZ,
-      x,h*.56,shoulderZ,
-      x,h*.91,crownZ,
-      x,h+.012,ridgeZ,
-      x,h-.075,lipZ,
-    );
-  }
-
-  for(let i=0;i<steps;i++){
-    const a=i*3,b=(i+1)*3;
-    if(i%2===0)earthIdx.push(a,a+1,b, a+1,b+1,b, a+1,a+2,b+1, a+2,b+2,b+1);
-    else earthIdx.push(a,b+1,b, a,a+1,b+1, a+1,b+2,b+1, a+1,a+2,b+2);
-  }
-  earthIdx.push(0,1,2);const ee=steps*3;earthIdx.push(ee,ee+2,ee+1);
-
-  for(let i=0;i<steps;i++){
-    const a=i*5,b=(i+1)*5;
-    for(let p=0;p<4;p++)grassIdx.push(a+p,a+p+1,b+p, a+p+1,b+p+1,b+p);
-  }
-
-  let earth=new THREE.BufferGeometry();earth.setAttribute('position',new THREE.Float32BufferAttribute(earthPos,3));earth.setIndex(earthIdx);earth=earth.toNonIndexed();earth.computeVertexNormals();
-  colorTriangles(earth,['#b88961','#bc8e64','#b3835c','#c09268','#b6875f'],seed+901);
-  let grass=new THREE.BufferGeometry();grass.setAttribute('position',new THREE.Float32BufferAttribute(grassPos,3));grass.setIndex(grassIdx);grass=grass.toNonIndexed();grass.computeVertexNormals();
-  return {earth,grass};
-}
-
-function ledges(root,mats){
-  const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
-  const earth=mats.dirt.clone();earth.name='route-1-ledge-earth';earth.color.set('#ffffff');earth.vertexColors=true;
-  const turf=mats.grass.clone();turf.name='route-1-ledge-grass';turf.color.set('#82b953');
-
-  LEDGE_RUNS.forEach(([r,c0,c1],index)=>{
-    const width=(c1-c0+1)*2,left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.10;
-    const geo=makeAnimeLedgeGeometry(width,7600+r*43+c0*29+index);
-    const earthMesh=new THREE.Mesh(geo.earth,earth);earthMesh.name='route-1-anime-ledge-earth';earthMesh.position.set(x,0,z);earthMesh.castShadow=true;earthMesh.receiveShadow=true;group.add(earthMesh);
-    const grassMesh=new THREE.Mesh(geo.grass,turf);grassMesh.name='route-1-anime-ledge-grass';grassMesh.position.set(x,0,z);grassMesh.receiveShadow=true;group.add(grassMesh);
-  });
-}
-
-export function makeRoute1(scene,mats,colliders){
+export function makeRoute1(scene,mats,colliders,ground){
   const root=new THREE.Group();root.name='route-1';scene.add(root);
   if(scene.fog?.isFog){scene.fog.near=95;scene.fog.far=240;}
-  buildPath(root,mats);tallGrass(root,mats);flowers(root,mats);treeSet(root,mats,colliders);ledges(root,mats);
+  buildPath(ground);tallGrass(root,mats);flowers(root,mats);treeSet(root,mats,colliders);buildLedges(root,mats);
   const sign=createRouteSign(mats);sign.position.set(ROUTE_1.sign.x,0,ROUTE_1.sign.z);root.add(sign);
   colliders.push({kind:'box',id:'route-1-sign',minX:-2.05,maxX:.05,minZ:-35.18,maxZ:-34.82});
   colliders.push({kind:'box',id:'route-1-west-boundary',minX:-100,maxX:-14.0,minZ:-90,maxZ:-18});

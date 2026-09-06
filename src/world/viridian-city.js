@@ -6,6 +6,7 @@ import {VIRIDIAN_CITY as CITY,viridianTile as tile} from './viridian-layout.js';
 import {createViridianBuilding} from './viridian-buildings.js';
 import {createSign,collapseBuilding} from './pallet-town.js';
 import {buildLedges} from './route1-ledges.js';
+import {makeMeadowClump,meadowMaterial} from './ground.js';
 
 // Hand-authored landscape interpretation of the original Red/Blue block map.
 // No source graphics are shipped: every tree, fence, flower and bank is geometry.
@@ -20,10 +21,6 @@ const PATHS=[
   [16,21,22,26],[20,35,26,26],[20,21,27,35],
 ];
 const boxCollider=(id,minX,maxX,minZ,maxZ)=>({id,kind:'box',minX,maxX,minZ,maxZ});
-function rect(root,mat,x0,x1,y0,y1,height=.019){
-  const [x,z]=tile(x0,y0),[xx,zz]=tile(x1,y1);
-  root.add(groundPolygon([[x-1,z-1],[xx+1,z-1],[xx+1,zz+1],[x-1,zz+1]],mat,height));
-}
 function forest(root,mats,colliders){
   const rand=seededRandom(2026),points=new Map();
   const add=(x,z,solid=true)=>points.set(`${x}/${z}`,{x,z,solid});
@@ -68,14 +65,12 @@ function fences(root,mats,colliders){
   }
   b.finish();
 }
-function terrain(root,mats,colliders){
+function terrain(root,mats,colliders,ground){
   const b=new Builder(root,mats),rand=seededRandom(771);
-  const trail=mats.path.clone();trail.name='viridian-worn-path';trail.color.set('#b9be7e');
-  // Merge adjacent path rectangles as one Shape union is unnecessary: same flat
-  // height, non-overlapping rectangles keep the grass trail quiet at eye level.
-  PATHS.forEach((p,i)=>rect(root,trail,...p,.018+i*.00004));
-  // Original gym yard is a gravel clearing, framed by its north/east trees.
-  rect(root,mats.dirt,24,35,2,8,.014);
+  const paintRect=(a,b,c,d,color)=>{const [x,z]=tile(a,c),[xx,zz]=tile(b,d);ground.paint([[x-1,z-1],[xx+1,z-1],[xx+1,zz+1],[x-1,zz+1]],color);};
+  // One blended path union, including the original gravel Gym yard.
+  paintRect(24,35,2,8,'#c8bb94');
+  PATHS.forEach(p=>paintRect(...p));
   // Tall western escarpment, with the Route 22 mouth cut through at rows 16–19.
   for(const [y0,y1] of [[0,15],[20,27]]){
     const [x,z]=tile(0,y0),[,zz]=tile(0,y1),length=zz-z+2;
@@ -127,10 +122,11 @@ function terrain(root,mats,colliders){
   colliders.push(boxCollider('viridian-pond',p.minX-.3,p.maxX+.3,p.minZ-.3,p.maxZ+.3));
   b.finish();
 }
-function plants(root,mats){
+function plants(root,mats,ground){
   const rand=seededRandom(149),stems=[],leaves=[],pink=[],cream=[],centers=[];
   for(const [x0,x1,y0,y1] of CITY.flowers){
     const [left,top]=tile(x0,y0),[right,bottom]=tile(x1,y1);
+    ground.patch((left+right)/2,(top+bottom)/2,(right-left)/2+1.5,(bottom-top)/2+1.5);
     for(let x=left-.5;x<right+.6;x+=.72)for(let z=top-.5;z<bottom+.6;z+=.75){
       const xx=x+(rand()-.5)*.15,zz=z+(rand()-.5)*.15,h=.19+rand()*.16;
       stems.push({position:[xx,h/2,zz],scale:[1,h/.3,1]});
@@ -143,19 +139,19 @@ function plants(root,mats){
   const petal=new THREE.IcosahedronGeometry(1,0);
   root.add(instanceSet(new THREE.CylinderGeometry(.011,.013,.3,4),mats.leafDark,stems,'viridian-flower-stems',false));
   for(const [arr,mat,name] of [[leaves,mats.leaf,'leaves'],[pink,mats.petalPink,'pink'],[cream,mats.petalCream,'cream'],[centers,mats.flowerCenter,'centers']])root.add(instanceSet(petal,mat,arr,`viridian-flowers-${name}`,false));
-  const blade=new THREE.BufferGeometry();blade.setAttribute('position',new THREE.Float32BufferAttribute([-.05,0,0,.05,0,0,.02,.22,0,0,0,-.05,0,0,.05,0,.27,.02],3));blade.computeVertexNormals();
+  const blade=makeMeadowClump(),grassMat=meadowMaterial(mats);
   const tufts=[];
   const blocked=(x,z)=>CITY.buildings.some(s=>Math.abs(x-s.x)<s.width/2+1&&Math.abs(z-s.z)<s.depth/2+1)||PATHS.some(([a,b,c,d])=>{const [l,t]=tile(a,c),[r,bt]=tile(b,d);return x>l-1.2&&x<r+1.2&&z>t-1.2&&z<bt+1.2;});
-  for(let i=0;i<2600;i++){
+  for(let i=0;i<2100;i++){
     const x=-28+rand()*59,z=-151+rand()*54;
     if(blocked(x,z)||x< -11&&z> -116&&z< -105||z< -143&&x>7)continue;
     tufts.push({position:[x,.022,z],scale:[1,.6+rand()*.6,1],rotation:[0,rand()*6.28,0]});
   }
-  root.add(instanceSet(blade,mats.blade,tufts,'viridian-meadow-grass',false));
+  root.add(instanceSet(blade,grassMat,tufts,'viridian-meadow-grass',false));
 }
-export function createViridianCity(scene,mats,colliders){
+export function createViridianCity(scene,mats,colliders,ground){
   const root=new THREE.Group();root.name=CITY.id;scene.add(root);
-  terrain(root,mats,colliders);forest(root,mats,colliders);fences(root,mats,colliders);plants(root,mats);
+  terrain(root,mats,colliders,ground);forest(root,mats,colliders);fences(root,mats,colliders);plants(root,mats,ground);
   const buildings=new Map();
   for(const spec of CITY.buildings){
     const building=createViridianBuilding(spec,mats);collapseBuilding(building);root.add(building);buildings.set(spec.id,building);

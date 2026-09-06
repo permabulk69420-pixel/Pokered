@@ -52,6 +52,9 @@ function chunkInstancedMesh(mesh,chunkSize){
     chunk.instanceMatrix.needsUpdate=true;
     if(chunk.instanceColor)chunk.instanceColor.needsUpdate=true;
     chunk.computeBoundingSphere();
+    // Shader wind bends vertices outside their static geometry. Preserve that
+    // margin after splitting so tips do not disappear at the view boundary.
+    chunk.boundingSphere.radius+=mesh.userData.windBoundsPadding||0;
     parent.add(chunk);
   }
   parent.remove(mesh);

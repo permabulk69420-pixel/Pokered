@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import { instanceSet } from './geometry.js';
 import { seededRandom } from './materials.js';
 
@@ -258,6 +259,7 @@ export function buildLedges(root,mats,{runs=LEDGE_RUNS,x0=-20,z0=Z0}={}){
   const tuftMat=mats.blade.clone();tuftMat.name='route-1-ledge-tufts';tuftMat.color.set('#699d46');tuftMat.side=THREE.DoubleSide;tuftMat.userData.route1LedgeMaterial=true;
   const tuftLight=mats.bladeLight.clone();tuftLight.name='route-1-ledge-tufts-light';tuftLight.color.set('#91bf58');tuftLight.side=THREE.DoubleSide;tuftLight.userData.route1LedgeMaterial=true;
   const tuftGeos=[makeTuftGeometry(1601),makeTuftGeometry(1602),makeTuftGeometry(1603)];
+  const sets=[[],[],[]],lightSets=[[],[],[]];
 
   runs.forEach(([r,c0,c1],index)=>{
     const width=(c1-c0+1)*2,left=x0+c0*2,right=x0+(c1+1)*2,x=(left+right)/2,z=z0+r*2+.10;
@@ -270,7 +272,7 @@ export function buildLedges(root,mats,{runs=LEDGE_RUNS,x0=-20,z0=Z0}={}){
     const tEnds=new THREE.Mesh(geo.turfEnds,endTurf);tEnds.name='route-1-ledged-turf-ends';tEnds.position.set(x,0,z);tEnds.receiveShadow=true;group.add(tEnds);
     const shadow=new THREE.Mesh(geo.shadow,undercut);shadow.name='route-1-ledged-undercut';shadow.position.set(x,0,z);group.add(shadow);
 
-    const rand=seededRandom(seed+701),sets=[[],[],[]],lightSets=[[],[],[]];
+    const rand=seededRandom(seed+701);
     const count=Math.max(5,Math.floor(width/.42));
     for(let i=0;i<count;i++){
       const t=(i+.35+rand()*.30)/count,localX=-width/2+t*width+(rand()-.5)*.12;
@@ -282,10 +284,22 @@ export function buildLedges(root,mats,{runs=LEDGE_RUNS,x0=-20,z0=Z0}={}){
         scale:[.82+rand()*.28,.78+rand()*.38,.82+rand()*.28],
       });
     }
-    tuftGeos.forEach((g,i)=>{
-      if(sets[i].length)group.add(instanceSet(g,tuftMat,sets[i],`route-1-ledge-tufts-${index}-${i}`,false));
-      if(lightSets[i].length)group.add(instanceSet(g,tuftLight,lightSets[i],`route-1-ledge-tufts-light-${index}-${i}`,false));
-    });
+  });
+  // Material and geometry are shared across runs. Keep one static mesh per
+  // material and six instanced tuft batches, rather than ~12 draws per ledge.
+  const buckets=new Map();
+  for(const mesh of [...group.children]){
+    mesh.updateMatrix();const geometry=mesh.geometry.clone().applyMatrix4(mesh.matrix);
+    if(!buckets.has(mesh.material))buckets.set(mesh.material,{parts:[],name:mesh.name,casts:mesh.castShadow,receives:mesh.receiveShadow});
+    buckets.get(mesh.material).parts.push(geometry);mesh.removeFromParent();mesh.geometry.dispose();
+  }
+  for(const [material,{parts,name,casts,receives}] of buckets){
+    const geometry=mergeGeometries(parts,false);parts.forEach(g=>g.dispose());geometry.computeBoundingSphere();
+    const mesh=new THREE.Mesh(geometry,material);mesh.name=name;mesh.castShadow=casts;mesh.receiveShadow=receives;group.add(mesh);
+  }
+  tuftGeos.forEach((g,i)=>{
+    if(sets[i].length)group.add(instanceSet(g,tuftMat,sets[i],`route-1-ledge-tufts-${i}`,false));
+    if(lightSets[i].length)group.add(instanceSet(g,tuftLight,lightSets[i],`route-1-ledge-tufts-light-${i}`,false));
   });
 }
 

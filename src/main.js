@@ -6,7 +6,7 @@ import { setupHands } from './xr/hands.js';
 import { setupPokeball } from './xr/pokeball.js';
 import { setupPokedex } from './xr/pokedex.js';
 
-const BUILD='KANTO 04 · VIRIDIAN INTERIORS · 2026.09.06';
+const BUILD='KANTO 05 · OUTDOOR POLISH · 2026.09.06';
 const canvas=document.querySelector('#world'),intro=document.querySelector('#intro'),walkButton=document.querySelector('#walk-button'),vrButton=document.querySelector('#vr-button'),menuButton=document.querySelector('#menu-button');
 const params=new URLSearchParams(location.search),touch=matchMedia('(pointer:coarse)').matches;
 const startInViridian=params.get('start')==='viridian';

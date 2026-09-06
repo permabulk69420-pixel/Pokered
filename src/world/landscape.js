@@ -1,25 +1,18 @@
 import * as THREE from 'three';
 import { Builder, groundPolygon, instanceSet } from './geometry.js';
 import { seededRandom } from './materials.js';
+import {groundUV,makeMeadowClump,meadowMaterial} from './ground.js';
 
-export function makeLandscape(scene,mats,layout) {
+export function makeLandscape(scene,mats,layout,ground) {
   const root=new THREE.Group();root.name='landscape';scene.add(root);
   const rand=seededRandom(1996);
-  const terrain=mats.grass.clone();terrain.name='meadow';
-  const canvas=document.createElement('canvas');canvas.width=canvas.height=512;
-  const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,512,512);
-  // A subtle seamless ground grain. Blades, flowers and stones are actual meshes.
-  for(let i=0;i<6200;i++){
-    const a=.018+rand()*.052;ctx.fillStyle=`rgba(67,95,35,${a})`;const x=rand()*512,y=rand()*512;
-    ctx.beginPath();ctx.ellipse(x,y,.5+rand()*2,.4+rand(),0,0,Math.PI*2);ctx.fill();
-  }
-  const texture=new THREE.CanvasTexture(canvas);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
-  texture.repeat.set(40,40);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;
-  terrain.map=texture;
-  const meadow=groundPolygon([[-180,-180],[180,-180],[180,180],[-4,180],[-4,12],[-4.6,10.4],[-5.8,9.9],[-10.2,9.9],[-11.5,10.4],[-12,12],[-12,180],[-180,180]],terrain,0);
+  // Preserve the established shoreline/pebble scatter: the old grain texture
+  // consumed these random values before placing the landscape meshes.
+  for(let i=0;i<6200*5;i++)rand();
+  const meadow=groundPolygon([[-180,-180],[180,-180],[180,180],[-4,180],[-4,12],[-4.6,10.4],[-5.8,9.9],[-10.2,9.9],[-11.5,10.4],[-12,12],[-12,180],[-180,180]],ground.material,0);
   // World-projected UVs keep grain consistent across the irregular coastline.
   const pos=meadow.geometry.attributes.position,uv=meadow.geometry.attributes.uv;
-  for(let i=0;i<pos.count;i++) uv.setXY(i,pos.getX(i)/360,pos.getZ(i)/360);
+  for(let i=0;i<pos.count;i++) uv.setXY(i,...groundUV(pos.getX(i),pos.getZ(i)));
   meadow.name='continuous-meadow-with-southern-inlet';root.add(meadow);
   const b=new Builder(root,mats);
   // The original has a mostly grassy commons: keep these trails soft and narrow.
@@ -29,8 +22,7 @@ export function makeLandscape(scene,mats,layout) {
     [[-.7,-3.7],[1.1,-3.7],[1.4,5.9],[5.9,6.1],[5.9,5.2],[4.15,5.2],[4.15,5],[-.2,4.7]],
     [[-.35,4.5],[1.25,5.9],[-3.1,8.1],[-7.6,9.7],[-8.9,9.8],[-8.9,8.7],[-4.15,6.8]],
   ];
-  const trailMat=mats.path.clone();trailMat.color.set('#b9be7e');
-  trails.forEach((points,i)=>{const p=groundPolygon(points,trailMat,.018+i*.001);p.name=`worn-grass-${i}`;root.add(p);});
+  trails.forEach(points=>ground.paint(points));
   // Little inset stepping stones at each doorstep, flush with the meadow.
   for(const s of layout.buildings) for(let j=0;j<3;j++) {
     const z=s.z+s.depth/2+.88+j*.45;
@@ -125,13 +117,12 @@ export function makeTrees(scene,mats,colliders) {
   return root;
 }
 
-export function makeGardensAndGrass(scene,mats,layout) {
+export function makeGardensAndGrass(scene,mats,layout,ground) {
   const root=new THREE.Group();root.name='flowers-and-meadow';scene.add(root);
   const b=new Builder(root,mats),rand=seededRandom(124),stems=[],leaves=[],pink=[],rose=[],cream=[],centres=[];
   for(const garden of layout.gardens) {
     const {x,z,width,depth}=garden;
-    const bedmat=mats.grassShade.clone();bedmat.color.set('#83a75a');
-    root.add(groundPolygon([[x-width/2,z-depth/2],[x+width/2,z-depth/2],[x+width/2,z+depth/2],[x-width/2,z+depth/2]],bedmat,.025));
+    ground.patch(x,z,width*.7,depth*.9,'53,103,43',.25);
     // Neatly planted rectangles are deliberate: this is a remaster of the original map.
     for(let gx=-width/2+.32;gx<width/2-.1;gx+=.44) for(let gz=-depth/2+.3;gz<depth/2-.1;gz+=.50) {
       const xx=x+gx+(rand()-.5)*.1,zz=z+gz+(rand()-.5)*.12,h=.27+rand()*.16;
@@ -173,21 +164,14 @@ export function makeGardensAndGrass(scene,mats,layout) {
   root.add(instanceSet(new THREE.CylinderGeometry(.012,.013,.35,4),mats.leafDark,stems,'flower-stems',false));
   root.add(instanceSet(petal,mats.leaf,leaves,'flower-leaves',false));
   for(const [arr,mat,name] of [[pink,mats.petalPink,'pink-flowers'],[rose,mats.petalRose,'rose-flowers'],[cream,mats.petalCream,'daisies'],[centres,mats.flowerCenter,'flower-centres']])root.add(instanceSet(petal,mat,arr,name,false));
-  // Short grass tufts use six triangles each, with no alpha-tested texture overdraw.
-  const geom=new THREE.BufferGeometry();const v=[];
-  for(let k=0;k<3;k++){const a=k*Math.PI/3,dx=Math.cos(a)*.055,dz=Math.sin(a)*.055;v.push(-dx,0,-dz,dx,0,dz,dx*.5,.24+(.03*k),dz*.5);}
-  geom.setAttribute('position',new THREE.Float32BufferAttribute(v,3));geom.computeVertexNormals();
+  const geom=makeMeadowClump(),grassMat=meadowMaterial(mats);
   const tufts=[],lightTufts=[];
-  for(let i=0;i<3100;i++) {
+  for(let i=0;i<1900;i++) {
     const x=-17.8+rand()*35.6,z=-15+rand()*31;if(!clear(x,z))continue;
-    const s=.35+rand()*.75;
+    const s=.55+rand()*.65;
     (i%4?tufts:lightTufts).push({position:[x,.025,z],scale:[s,s,s],rotation:[0,rand()*6.28,0]});
   }
-  root.add(instanceSet(geom,mats.blade,tufts,'meadow-grass',false));root.add(instanceSet(geom,mats.bladeLight,lightTufts,'sunlit-grass',false));
-  // Route 1 is just the original northern grass threshold, closed to exploration for now.
-  const tall=[];
-  for(let z=-18.2;z< -15.4;z+=.29)for(let x=-1.7;x<1.8;x+=.27)tall.push({position:[x+(rand()-.5)*.12,.01,z],scale:[1.55,2.1+rand(),1.55],rotation:[0,rand()*6.3,0]});
-  root.add(instanceSet(geom,mats.blade,tall,'route-1-tall-grass',false));
+  root.add(instanceSet(geom,grassMat,tufts,'meadow-grass',false));root.add(instanceSet(geom,grassMat,lightTufts,'sunlit-grass',false));
   b.finish();return root;
 }
 
