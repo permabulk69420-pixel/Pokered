@@ -1,3 +1,4 @@
+import { exteriorDoorColliders } from './interiors/layout.js';
 import * as THREE from 'three';
 import {Builder,groundPolygon,instanceSet} from './geometry.js';
 import {seededRandom} from './materials.js';
@@ -158,7 +159,7 @@ export function createViridianCity(scene,mats,colliders){
   const buildings=new Map();
   for(const spec of CITY.buildings){
     const building=createViridianBuilding(spec,mats);collapseBuilding(building);root.add(building);buildings.set(spec.id,building);
-    colliders.push(boxCollider(spec.id,spec.x-spec.width/2,spec.x+spec.width/2,spec.z-spec.depth/2,spec.z+spec.depth/2+.14));
+    colliders.push(...exteriorDoorColliders(spec));
   }
   for(const spec of CITY.signs){
     const sign=createSign(spec,mats),[x,z]=tile(...spec.tile);sign.position.set(x,0,z+.45);root.add(sign);

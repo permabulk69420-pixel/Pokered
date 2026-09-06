@@ -1,9 +1,13 @@
 # Pokered — Kanto VR
 
-**New: Viridian City exteriors**, connected continuously to the existing Route 1.
+**New: all five Viridian City interiors**, furnished in the existing Pallet style.
 Walk north from Pallet, or [start in Viridian](https://permabulk69420-pixel.github.io/Pokered/?start=viridian).
-Includes the Pokémon Center, Mart, two houses, Gym, pond, cliffs, fences and
-flowers. No new interiors or NPCs. See [Viridian details and previews](docs/VIRIDIAN.md).
+Walk through the open doors to explore the Pokémon Center, Mart, school,
+nickname house and Gym. Layouts follow the original Red/Blue room maps, with
+Pallet's warm woodwork, furnishings and doorway fade. This is an environment
+pass: services, new NPCs and moving Gym arrows are not implemented.
+See [interior details and previews](docs/VIRIDIAN_INTERIORS.md) and
+[the earlier exterior pass](docs/VIRIDIAN.md).
 
 The original Pallet build notes follow.
 

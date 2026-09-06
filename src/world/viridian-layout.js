@@ -3,7 +3,7 @@
 export const viridianTile = (x,y) => [-39+x*2,-161+y*2];
 const building=(id,kind,tile,width,depth,cx,accent)=>{
   const [doorX,frontZ]=viridianTile(...tile);
-  return {id,kind,tile,width,depth,x:viridianTile(cx,0)[0],z:frontZ-depth/2,doorX,accent};
+  return {id,kind,tile,width,depth,doorWidth:kind==='house'?1.02:1.44,doubleDoor:kind!=='house',x:viridianTile(cx,0)[0],z:frontZ-depth/2,doorX,accent};
 };
 export const VIRIDIAN_CITY={
   id:'viridian-city',size:[40,36],northZ:-162,southZ:-90,

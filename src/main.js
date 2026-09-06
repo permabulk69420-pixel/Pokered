@@ -6,7 +6,7 @@ import { setupHands } from './xr/hands.js';
 import { setupPokeball } from './xr/pokeball.js';
 import { setupPokedex } from './xr/pokedex.js';
 
-const BUILD='KANTO 03 · VIRIDIAN CITY · 2026.09.06';
+const BUILD='KANTO 04 · VIRIDIAN INTERIORS · 2026.09.06';
 const canvas=document.querySelector('#world'),intro=document.querySelector('#intro'),walkButton=document.querySelector('#walk-button'),vrButton=document.querySelector('#vr-button'),menuButton=document.querySelector('#menu-button');
 const params=new URLSearchParams(location.search),touch=matchMedia('(pointer:coarse)').matches;
 const startInViridian=params.get('start')==='viridian';
@@ -145,6 +145,11 @@ if(params.get('view')==='lab'){walk(false);locomotion.spawn({x:1.0,z:9.0,yaw:-.6
 if(params.get('view')==='home'){walk(false);locomotion.spawn({x:-12.8,z:-2.0,yaw:-.60});}
 if(params.get('view')==='shore'){walk(false);locomotion.spawn({x:-8,z:8.7,yaw:Math.PI});}
 const indoorViews={
+  'viridian-center-interior':{space:'viridian-pokecenter',x:-3.6,z:3.8,yaw:-.25},
+  'viridian-mart-interior':{space:'viridian-mart',x:0,z:3.8,yaw:.25},
+  'viridian-school-interior':{space:'viridian-school',x:-1.2,z:3.8,yaw:0},
+  'viridian-house-interior':{space:'viridian-nickname-house',x:-1.2,z:3.8,yaw:0},
+  'viridian-gym-interior':{space:'viridian-gym',x:8.4,z:9.7,yaw:.3},
   'red-interior':{space:'reds-house',x:-1.2,z:3.95,yaw:0},
   'bedroom':{space:'reds-house',x:2.05,z:3.6,y:3.05,yaw:.72},
   'blue-interior':{space:'blues-house',x:1.3,z:3.6,yaw:.38},

@@ -1,3 +1,4 @@
+import { VIRIDIAN_INTERIORS } from './viridian-layout.js';
 // Red/Blue's original indoor maps are separate spaces, larger than the outside
 // sprites. Retain their 8×8 / 10×12 tile plans with 1.2 m furnishing coordinates.
 // Source: pret/pokered maps/{RedsHouse1F,RedsHouse2F,BluesHouse,OaksLab}.blk
@@ -15,6 +16,7 @@ export const roomTile = (x, y, columns=8, rows=8) => [
 ];
 
 export const INTERIORS = {
+  ...VIRIDIAN_INTERIORS,
   'reds-house': { id:'reds-house', label:'Red’s house', width:9.6, depth:9.6, doorX:-1.2, doorWidth:1.5, floors:2, stairs:RED_STAIRS },
   'blues-house': { id:'blues-house', label:'Blue’s house', width:9.6, depth:9.6, doorX:-1.2, doorWidth:1.5, floors:1 },
   'oaks-lab': { id:'oaks-lab', label:'Oak’s laboratory', width:12, depth:14.4, doorX:0, doorWidth:1.7, floors:1 },
@@ -26,19 +28,20 @@ export const interiorArrival = spec => ({x:spec.doorX, z:spec.depth/2-.85, y:0, 
 export const exteriorArrival = spec => ({x:spec.doorX, z:spec.z+spec.depth/2+.95, y:0, yaw:Math.PI});
 
 export function exteriorDoorColliders(spec) {
-  const edge=spec.z+spec.depth/2, half=spec.kind==='lab'?.675:.51;
+  const edge=spec.z+spec.depth/2, half=spec.doorWidth?spec.doorWidth/2:spec.kind==='lab'?.675:.51;
   const left=spec.x-spec.width/2-.08, right=spec.x+spec.width/2+.08;
   return [
     {kind:'box',id:spec.id,minX:left,maxX:spec.doorX-half,minZ:spec.z-spec.depth/2-.1,maxZ:edge+.13},
     {kind:'box',id:spec.id,minX:spec.doorX+half,maxX:right,minZ:spec.z-spec.depth/2-.1,maxZ:edge+.13},
     {kind:'box',id:spec.id,minX:left,maxX:right,minZ:spec.z-spec.depth/2-.1,maxZ:edge-1.2},
-    {kind:'box',id:`${spec.id}-open-door`,minX:spec.doorX-half-.23,maxX:spec.doorX-half+.06,minZ:edge+.15,maxZ:edge+half*2+.22},
+    {kind:'box',id:`${spec.id}-open-door`,minX:spec.doorX-half-.23,maxX:spec.doorX-half+.06,minZ:edge+.15,maxZ:edge+(spec.doubleDoor?half:half*2)+.22},
+    ...(spec.doubleDoor?[{kind:'box',id:`${spec.id}-right-open-door`,minX:spec.doorX+half-.06,maxX:spec.doorX+half+.23,minZ:edge+.15,maxZ:edge+half+.22}]:[]),
   ];
 }
 
 export function entranceAt(buildings, x, z) {
   return buildings.find(spec => {
-    const half=spec.kind==='lab'?.675:.51, edge=spec.z+spec.depth/2;
+    const half=spec.doorWidth?spec.doorWidth/2:spec.kind==='lab'?.675:.51, edge=spec.z+spec.depth/2;
     return Math.abs(x-spec.doorX)<half-.13 && z<edge+.1 && z>edge-1.05;
   })?.id || null;
 }
