@@ -6,63 +6,19 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
 concurrency:
   group: github-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Ensure runtime binary assets are present
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p public/assets/hands public/assets/pokeball
-          changed=0
-
-          if [ ! -f public/assets/hands/LeftHand.glb ]; then
-            curl --fail --location --silent --show-error \
-              https://raw.githubusercontent.com/permabulk69420-pixel/dumbgame/main/assets/models/hands/LeftHand.glb \
-              --output public/assets/hands/LeftHand.glb
-            changed=1
-          fi
-          if [ ! -f public/assets/hands/RightHand.glb ]; then
-            curl --fail --location --silent --show-error \
-              https://raw.githubusercontent.com/permabulk69420-pixel/dumbgame/main/assets/models/hands/RightHand.glb \
-              --output public/assets/hands/RightHand.glb
-            changed=1
-          fi
-
-          pokeball='public/assets/pokeball/pokeball_animated_open_no_blue.glb'
-          # The uploaded binary is staged as small gzip+base64 chunks because the
-          # GitHub connector only writes UTF-8 text files reliably. gz09 is the
-          # completion marker, so an intermediate push never decodes a partial file.
-          if [ ! -f "$pokeball" ] && [ -f .pokeball-import/gz09 ]; then
-            cat .pokeball-import/gz0* | base64 --decode | gzip --decompress > "$pokeball"
-            test "$(head -c 4 "$pokeball")" = 'glTF'
-            echo '6ead17252e68fe0edbde405a27349962820db932388966c6ffd04e60b3506525  public/assets/pokeball/pokeball_animated_open_no_blue.glb' | sha256sum --check --strict
-            changed=1
-          fi
-
-          if [ "$changed" -eq 1 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add public/assets/hands/LeftHand.glb public/assets/hands/RightHand.glb
-            if [ -f "$pokeball" ]; then git add "$pokeball"; fi
-            if [ -f "$pokeball" ] && [ -d .pokeball-import ]; then git rm -r .pokeball-import; fi
-            if ! git diff --cached --quiet; then
-              git commit -m "Persist runtime VR binary assets"
-              if ! git push; then
-                echo "::warning::Runtime binaries were included in this deployment but could not be persisted to main."
-              fi
-            fi
-          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
