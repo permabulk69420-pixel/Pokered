@@ -4,9 +4,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const STARTER_GRAB_RADIUS=.30;
 const STARTER_GRAB_ON=.45;
 const STARTER_FALLBACK_CENTER_Y=1.012;
-const FOLLOW_STOP=.92;
-const FOLLOW_WALK=1.45;
-const FOLLOW_RUN=2.85;
+
+// Companion locomotion is based on the path the player actually walked, not
+// the direction their head happens to be facing. This keeps Charmander behind
+// the player instead of making him orbit whenever the player looks around.
+const TRAIL_DISTANCE=1.4;
+const TRAIL_SAMPLE_DISTANCE=.14;
+const TRAIL_MAX_POINTS=96;
+const FOLLOW_STOP=.34;
+const FOLLOW_WALK=1.35;
+const FOLLOW_RUN=2.35;
+const FOLLOW_RUN_DISTANCE=2.65;
 const FOLLOW_SNAP=8;
 const RECALL_RADIUS=1.35;
 
@@ -34,15 +42,27 @@ function makeAnimator(model,clips,species){
   const mixer=new THREE.AnimationMixer(model),actions=new Map();
   const selected={idle:chooseClip(clips,species.idle),walk:chooseClip(clips,species.walk),run:chooseClip(clips,species.run),scratch:chooseClip(clips,species.scratch)};
   for(const [key,clip] of Object.entries(selected))if(clip){
-    const action=mixer.clipAction(clip);action.enabled=true;action.setLoop(THREE.LoopRepeat,Infinity);actions.set(key,action);
+    const action=mixer.clipAction(clip);
+    action.enabled=true;
+    action.setLoop(THREE.LoopRepeat,Infinity);
+    // The generated Charmander run is authored noticeably too frantic at 1x.
+    // Keep the real run clip, but play it at a calmer rate instead of making
+    // the legs strobe when he has to catch up.
+    action.setEffectiveTimeScale(key==='run'?.72:1);
+    actions.set(key,action);
   }
-  let current=null;
+  let current=null,currentKey=null;
   function play(key){
-    const next=actions.get(key)||actions.get('idle')||actions.values().next().value;if(!next||next===current)return;
-    next.reset().fadeIn(.16).play();if(current)current.fadeOut(.16);current=next;
+    const next=actions.get(key)||actions.get('idle')||actions.values().next().value;
+    if(!next||next===current)return;
+    next.reset();
+    next.setEffectiveTimeScale(key==='run'?.72:1);
+    next.fadeIn(.18).play();
+    if(current)current.fadeOut(.18);
+    current=next;currentKey=key;
   }
   play('idle');
-  return {update:dt=>mixer.update(dt),play,names:clips.map(clip=>clip.name)};
+  return {update:dt=>mixer.update(dt),play,names:clips.map(clip=>clip.name),get current(){return currentKey;}};
 }
 
 function normalizeModel(model,height){
@@ -77,8 +97,9 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
   const companion=new THREE.Group();companion.name='active-pokemon';companion.visible=false;scene.add(companion);
   const temp=new THREE.Vector3(),head=new THREE.Vector3(),forward=new THREE.Vector3(),desired=new THREE.Vector3(),delta=new THREE.Vector3();
   const handWorld=new THREE.Vector3(),slotWorld=new THREE.Vector3();
-  const starterSlots=findStarterSlots(scene);
+  const trail=[];
   const state={flags:{starterSelectionUnlocked:true,starterChosen:false},starter:null,party:[]};
+  const starterSlots=findStarterSlots(scene);
   let activeKey=null,model=null,animator=null,lastSpaceVisible=false;
 
   async function loadSpecies(key){
@@ -118,12 +139,64 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
   }
 
   function ensureCompanion(){if(!model&&charmanderAsset){model=charmanderAsset.root;animator=charmanderAsset.animation;companion.add(model);}}
+
+  function resetTrail(){
+    trail.length=0;
+    if(!playerCamera)return;
+    playerCamera.getWorldPosition(head);head.y=rig.position.y;trail.push(head.clone());
+  }
+
+  function fallbackBehind(out){
+    playerCamera.getWorldPosition(head);playerCamera.getWorldDirection(forward);forward.y=0;
+    if(forward.lengthSq()<.001)forward.set(0,0,-1);else forward.normalize();
+    return out.copy(head).addScaledVector(forward,-TRAIL_DISTANCE).setY(rig.position.y);
+  }
+
+  function sampleTrail(){
+    playerCamera.getWorldPosition(head);head.y=rig.position.y;
+    if(!trail.length){trail.push(head.clone());return;}
+    const latest=trail[trail.length-1];
+    const dx=head.x-latest.x,dz=head.z-latest.z;
+    if(dx*dx+dz*dz>=TRAIL_SAMPLE_DISTANCE*TRAIL_SAMPLE_DISTANCE){
+      trail.push(head.clone());
+      if(trail.length>TRAIL_MAX_POINTS)trail.splice(0,trail.length-TRAIL_MAX_POINTS);
+    }
+  }
+
+  function trailTarget(out){
+    if(!trail.length)return fallbackBehind(out);
+    // Walk backward through the recorded route until we are about 1.4 m behind
+    // the player. Interpolate within the segment so the target moves smoothly.
+    let remaining=TRAIL_DISTANCE;
+    const newest=trail[trail.length-1];
+    let newer=head; // current unsampled head position is the newest endpoint.
+    for(let i=trail.length-1;i>=0;i--){
+      const older=trail[i];
+      const dx=newer.x-older.x,dz=newer.z-older.z,segment=Math.hypot(dx,dz);
+      if(segment>=remaining&&segment>.0001){
+        const t=remaining/segment;
+        out.set(
+          newer.x+(older.x-newer.x)*t,
+          rig.position.y,
+          newer.z+(older.z-newer.z)*t
+        );
+        return out;
+      }
+      remaining-=segment;newer=older;
+    }
+    // The player has not yet walked a full trail distance. Stay at the oldest
+    // known path point rather than walking into the player's current position.
+    return out.copy(trail[0]).setY(rig.position.y);
+  }
+
   function release(key,position){
     if(!state.party.some(p=>p.species===key)||activeKey===key||key!=='charmander'||!charmanderAsset)return false;
-    ensureCompanion();activeKey=key;companion.visible=renderer.xr.isPresenting;companion.position.set(position.x,rig.position.y,position.z);
-    companion.rotation.set(0,SPECIES[key].forwardYaw,0);animator?.play('idle');emit('released',{species:key});return true;
+    ensureCompanion();activeKey=key;companion.visible=renderer.xr.isPresenting;
+    companion.position.set(position.x,rig.position.y,position.z);
+    companion.rotation.set(0,SPECIES[key].forwardYaw,0);animator?.play('idle');resetTrail();
+    emit('released',{species:key});return true;
   }
-  function recall(key){if(activeKey!==key)return false;activeKey=null;companion.visible=false;animator?.play('idle');emit('recalled',{species:key});return true;}
+  function recall(key){if(activeKey!==key)return false;activeKey=null;companion.visible=false;animator?.play('idle');trail.length=0;emit('recalled',{species:key});return true;}
   function ballOpened(key,position){
     if(!key||!state.party.some(p=>p.species===key))return;
     if(activeKey!==key){release(key,position);return;}
@@ -133,16 +206,21 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
   function updateFollower(dt){
     if(!activeKey||!model||!playerCamera)return;
     companion.visible=renderer.xr.isPresenting;if(!renderer.xr.isPresenting)return;
-    playerCamera.getWorldPosition(head);playerCamera.getWorldDirection(forward);forward.y=0;
-    if(forward.lengthSq()<.001)forward.set(0,0,-1);else forward.normalize();
-    desired.copy(head).addScaledVector(forward,-1.12);desired.x+=forward.z*.42;desired.z-=forward.x*.42;desired.y=rig.position.y;
+    playerCamera.getWorldPosition(head);head.y=rig.position.y;sampleTrail();trailTarget(desired);
     delta.copy(desired).sub(companion.position);delta.y=0;const distance=delta.length();
-    if(distance>FOLLOW_SNAP){companion.position.copy(desired);animator?.play('idle');}
-    else if(distance>FOLLOW_STOP){
-      const speed=distance>3?FOLLOW_RUN:FOLLOW_WALK,step=Math.min(distance-FOLLOW_STOP,speed*dt);delta.normalize();companion.position.addScaledVector(delta,step);
+    if(distance>FOLLOW_SNAP){
+      // Teleports/door changes still place him behind the player, never inside
+      // the player's body.
+      companion.position.copy(desired);animator?.play('idle');
+    }else if(distance>FOLLOW_STOP){
+      const running=distance>FOLLOW_RUN_DISTANCE;
+      const speed=running?FOLLOW_RUN:FOLLOW_WALK;
+      const step=Math.min(distance-FOLLOW_STOP,speed*dt);
+      delta.normalize();companion.position.addScaledVector(delta,step);
       const targetYaw=Math.atan2(delta.x,delta.z)+SPECIES[activeKey].forwardYaw;
-      const turn=THREE.MathUtils.euclideanModulo(targetYaw-companion.rotation.y+Math.PI,Math.PI*2)-Math.PI;companion.rotation.y+=turn*Math.min(1,dt*7);
-      animator?.play(distance>3?'run':'walk');
+      const turn=THREE.MathUtils.euclideanModulo(targetYaw-companion.rotation.y+Math.PI,Math.PI*2)-Math.PI;
+      companion.rotation.y+=turn*Math.min(1,dt*7);
+      animator?.play(running?'run':'walk');
     }else animator?.play('idle');
     companion.position.y=THREE.MathUtils.lerp(companion.position.y,rig.position.y,Math.min(1,dt*8));animator?.update(dt);
   }
@@ -150,9 +228,12 @@ export async function createPokemonSystem({renderer,scene,rig,states,onClaimBall
   function update(dt){
     const xr=renderer.xr.isPresenting;checkStarterPickup();updateFollower(dt);if(!xr&&companion.visible)companion.visible=false;
     const lab=scene.getObjectByName('interior-oaks-lab'),visible=!!lab?.visible;
-    if(visible!==lastSpaceVisible){lastSpaceVisible=visible;if(activeKey&&xr&&companion.position.distanceTo(rig.position)>FOLLOW_SNAP)companion.position.copy(rig.position);}
+    if(visible!==lastSpaceVisible){
+      lastSpaceVisible=visible;
+      if(activeKey&&xr){resetTrail();fallbackBehind(desired);if(companion.position.distanceTo(rig.position)>FOLLOW_SNAP)companion.position.copy(desired);}
+    }
   }
-  function resetSession(){if(activeKey){companion.visible=false;companion.position.copy(rig.position);}}
+  function resetSession(){if(activeKey){companion.visible=false;resetTrail();fallbackBehind(desired);companion.position.copy(desired);}}
   function setStarterSelectionUnlocked(value){state.flags.starterSelectionUnlocked=!!value;emit('starter-lock',{unlocked:state.flags.starterSelectionUnlocked});}
 
   return {update,ballOpened,release,recall,resetSession,setStarterSelectionUnlocked,
