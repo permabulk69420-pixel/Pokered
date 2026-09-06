@@ -10,6 +10,8 @@ export const ROUTE_1 = {
 const CELL=2, X0=-19, Z0=-89;
 const cellPos=(c,r)=>[X0+c*CELL,Z0+r*CELL];
 
+// Route 1 reference grid, north -> south. The final eight rows intentionally
+// continue straight into Pallet's centred north trail instead of stepping east.
 const PATH_MASK=[
   '..........PP........','..........PP........','..........PP........','..........PP........',
   '..........PPPPPPPP..','..............PPPP..','....................','....................',
@@ -18,8 +20,8 @@ const PATH_MASK=[
   '......PPPPPPPP......','......PPPPPPPP......','......PP............','....................',
   '......PPPPPPPPPPPP..','......PPPPPPPPPPPP..','................PP..','....................',
   '................PP..','................PP..','....PPPPPPPPPPPPPP..','......PPP...........',
-  '..........PP........','..........PP........','..........PP........','..........PP........',
-  '....................','....................','....................','....................',
+  '.........PP.........','.........PP.........','.........PP.........','.........PP.........',
+  '.........PP.........','.........PP.........','.........PP.........','.........PP.........',
 ];
 
 const GRASS_MASK=[
@@ -31,7 +33,7 @@ const GRASS_MASK=[
   '....................','....................','............GGGG....','............GGGG....',
   '............GGGG....','............GGGG....','....................','....................',
   '......GGGG....GGGG..','......GGGG....GGGG..','....GGGG....GGGG....','....GGGG....GGGG....',
-  '..........GG........','..........GG........','..........GG........','..........GG........',
+  '....................','....................','....................','....................',
 ];
 
 const FLOWER_MASK=[
@@ -46,8 +48,8 @@ const FLOWER_MASK=[
   '....................','....................','....................','....................',
 ];
 
-// Horizontal ledge runs from the reference map. Row 19 has two one-tile gaps
-// at columns 5 and 9; it is three separate banks, not one continuous wall.
+// Horizontal ledge runs from the Gen-I reference. Row 19 is three separate
+// banks with two gaps; these positions are data, not part of the renderer.
 const LEDGE_RUNS=[
   [5,4,8],[5,10,13],
   [9,4,8],
@@ -78,7 +80,12 @@ function addTreeCells(add){
   for(let r=4;r<=9;r++)add(9,r);
   add(4,13);add(5,13);for(let c=10;c<=13;c++)add(c,13);
   for(let c=4;c<=11;c++)add(c,23);
-  for(let c=4;c<=9;c++)add(c,32);for(let c=12;c<=17;c++)add(c,32);for(let r=33;r<=35;r++){add(9,r);add(12,r);}
+
+  // Pallet's north border opens at x=-2..2. Route 1 now uses the same centred
+  // opening instead of the previous one-cell-east seam.
+  for(let c=4;c<=8;c++)add(c,32);
+  for(let c=11;c<=17;c++)add(c,32);
+  for(let r=33;r<=35;r++){add(8,r);add(11,r);}
 }
 
 function treeSet(root,mats,colliders){
@@ -98,14 +105,26 @@ function treeSet(root,mats,colliders){
   }
   const crown=new THREE.IcosahedronGeometry(1,1);
   root.add(instanceSet(new THREE.CylinderGeometry(.14,.24,1.8,7),mats.trunk,trunk,'route-1-tree-trunks'));
-  root.add(instanceSet(crown,mats.leafDark,lower,'route-1-tree-lower'));root.add(instanceSet(crown,mats.leaf,mid,'route-1-tree-middle'));root.add(instanceSet(crown,mats.leafLight,top,'route-1-tree-top'));root.add(instanceSet(crown,mats.leaf,tuft,'route-1-tree-lobes'));
-  const shadowTex=document.createElement('canvas');shadowTex.width=shadowTex.height=64;const c=shadowTex.getContext('2d');const gr=c.createRadialGradient(32,32,4,32,32,32);gr.addColorStop(0,'rgba(32,56,21,.26)');gr.addColorStop(.6,'rgba(32,56,21,.10)');gr.addColorStop(1,'rgba(32,56,21,0)');c.fillStyle=gr;c.fillRect(0,0,64,64);
-  const sm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(shadowTex),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});root.add(instanceSet(new THREE.PlaneGeometry(2,2),sm,shadows,'route-1-tree-contact-shadows',false));
+  root.add(instanceSet(crown,mats.leafDark,lower,'route-1-tree-lower'));
+  root.add(instanceSet(crown,mats.leaf,mid,'route-1-tree-middle'));
+  root.add(instanceSet(crown,mats.leafLight,top,'route-1-tree-top'));
+  root.add(instanceSet(crown,mats.leaf,tuft,'route-1-tree-lobes'));
+
+  const shadowTex=document.createElement('canvas');shadowTex.width=shadowTex.height=64;
+  const c=shadowTex.getContext('2d');const gr=c.createRadialGradient(32,32,4,32,32,32);
+  gr.addColorStop(0,'rgba(32,56,21,.26)');gr.addColorStop(.6,'rgba(32,56,21,.10)');gr.addColorStop(1,'rgba(32,56,21,0)');c.fillStyle=gr;c.fillRect(0,0,64,64);
+  const sm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(shadowTex),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
+  root.add(instanceSet(new THREE.PlaneGeometry(2,2),sm,shadows,'route-1-tree-contact-shadows',false));
 }
 
 function buildPath(root,mats){
-  const trail=mats.path.clone();trail.name='route-1-path';trail.color.set('#b9be7e');const pathRoot=new THREE.Group();pathRoot.name='route-1-canonical-path';root.add(pathRoot);const b=new Builder(pathRoot,mats);
-  for(let r=0;r<36;r++)for(let c=0;c<20;c++)if(PATH_MASK[r][c]==='P'){const [x,z]=cellPos(c,r);b.box(2.04,.018,2.04,x,.022,z,trail);}b.finish({shadows:false});
+  const trail=mats.path.clone();trail.name='route-1-path';trail.color.set('#b9be7e');
+  const pathRoot=new THREE.Group();pathRoot.name='route-1-canonical-path';root.add(pathRoot);
+  const b=new Builder(pathRoot,mats);
+  for(let r=0;r<36;r++)for(let c=0;c<20;c++)if(PATH_MASK[r][c]==='P'){
+    const [x,z]=cellPos(c,r);b.box(2.04,.018,2.04,x,.022,z,trail);
+  }
+  b.finish({shadows:false});
 }
 
 function makeGrassClumpGeometry(seed,bladeCount=12){
@@ -127,27 +146,17 @@ function makeGrassClumpGeometry(seed,bladeCount=12){
     const start=positions.length/3;
 
     for(let i=0;i<=segments;i++){
-      const t=i/segments;
-      const curve=t*t;
-      const sideways=Math.sin(t*Math.PI)*curl;
+      const t=i/segments,curve=t*t,sideways=Math.sin(t*Math.PI)*curl;
       const cx=rootX+forward.x*lean*curve+side.x*sideways;
       const cz=rootZ+forward.z*lean*curve+side.z*sideways;
       const cy=height*t;
       const halfWidth=baseWidth*.5*Math.pow(1-t,.72)+.003;
-      positions.push(cx-side.x*halfWidth,cy,cz-side.z*halfWidth);
-      positions.push(cx+side.x*halfWidth,cy,cz+side.z*halfWidth);
-
+      positions.push(cx-side.x*halfWidth,cy,cz-side.z*halfWidth,cx+side.x*halfWidth,cy,cz+side.z*halfWidth);
       const col=new THREE.Color();
-      if(t<.52)col.copy(rootColor).lerp(midColor,t/.52);
-      else col.copy(midColor).lerp(tipColor,(t-.52)/.48);
-      col.offsetHSL(bladeTone*.08,0,bladeTone);
-      colors.push(col.r,col.g,col.b,col.r,col.g,col.b);
+      if(t<.52)col.copy(rootColor).lerp(midColor,t/.52);else col.copy(midColor).lerp(tipColor,(t-.52)/.48);
+      col.offsetHSL(bladeTone*.08,0,bladeTone);colors.push(col.r,col.g,col.b,col.r,col.g,col.b);
     }
-
-    for(let i=0;i<segments;i++){
-      const a=start+i*2,b=a+2;
-      indices.push(a,b,a+1,a+1,b,b+1);
-    }
+    for(let i=0;i<segments;i++){const a=start+i*2,b=a+2;indices.push(a,b,a+1,a+1,b,b+1);}
   }
 
   const geometry=new THREE.BufferGeometry();
@@ -159,10 +168,7 @@ function makeGrassClumpGeometry(seed,bladeCount=12){
 
 function makeGrassMaterial(mats){
   const material=mats.blade.clone();
-  material.name='route-1-curved-grass';
-  material.color.set('#ffffff');
-  material.vertexColors=true;
-  material.side=THREE.DoubleSide;
+  material.name='route-1-curved-grass';material.color.set('#ffffff');material.vertexColors=true;material.side=THREE.DoubleSide;
   material.onBeforeCompile=(shader)=>{
     shader.uniforms.uGrassTime={value:0};
     shader.vertexShader=shader.vertexShader
@@ -199,13 +205,10 @@ function tallGrass(root,mats){
       const x=cx-.76+gx*.38+(rand()-.5)*.18;
       const z=cz-.76+gz*.38+(rand()-.5)*.18;
       const variant=Math.floor(rand()*variants.length);
-      const heightScale=.82+rand()*.42;
-      const widthScale=.88+rand()*.28;
+      const heightScale=.82+rand()*.42,widthScale=.88+rand()*.28;
       transforms[variant].push({
-        position:[x,.025,z],
-        rotation:[(rand()-.5)*.055,rand()*Math.PI*2,(rand()-.5)*.055],
-        scale:[widthScale,heightScale,widthScale],
-        color:tints[Math.floor(rand()*tints.length)],
+        position:[x,.025,z],rotation:[(rand()-.5)*.055,rand()*Math.PI*2,(rand()-.5)*.055],
+        scale:[widthScale,heightScale,widthScale],color:tints[Math.floor(rand()*tints.length)],
       });
     }
   }
@@ -213,91 +216,104 @@ function tallGrass(root,mats){
   variants.forEach((geometry,i)=>{
     const mesh=instanceSet(geometry,material,transforms[i],`route-1-curved-grass-${i}`,false);
     if(mesh.boundingSphere)mesh.boundingSphere.radius+=1.6;
-    mesh.onBeforeRender=()=>{
-      const shader=material.userData.shader;
-      if(shader)shader.uniforms.uGrassTime.value=performance.now()*.001;
-    };
+    mesh.onBeforeRender=()=>{const shader=material.userData.shader;if(shader)shader.uniforms.uGrassTime.value=performance.now()*.001;};
     grassRoot.add(mesh);
   });
 }
 
 function flowers(root,mats){
   const rand=seededRandom(77),stems=[],petals=[],centres=[];
-  for(let r=0;r<36;r++)for(let c=0;c<20;c++)if(FLOWER_MASK[r][c]==='F'){const [cx,cz]=cellPos(c,r);for(let i=0;i<3;i++){const x=cx+(rand()-.5)*1.25,z=cz+(rand()-.5)*1.25,h=.16+rand()*.08;stems.push({position:[x,h/2,z],scale:[1,h/.20,1]});petals.push({position:[x,h+.025,z],scale:[.9+rand()*.25,.9+rand()*.25,.9+rand()*.25]});centres.push({position:[x,h+.04,z],scale:[1,1,1]});}}
-  root.add(instanceSet(new THREE.CylinderGeometry(.012,.016,.20,5),mats.grassShade,stems,'route-1-flower-stems',false));root.add(instanceSet(new THREE.IcosahedronGeometry(.065,0),mats.petalCream,petals,'route-1-flower-petals',false));root.add(instanceSet(new THREE.IcosahedronGeometry(.025,0),mats.flowerCenter,centres,'route-1-flower-centres',false));
+  for(let r=0;r<36;r++)for(let c=0;c<20;c++)if(FLOWER_MASK[r][c]==='F'){
+    const [cx,cz]=cellPos(c,r);
+    for(let i=0;i<3;i++){
+      const x=cx+(rand()-.5)*1.25,z=cz+(rand()-.5)*1.25,h=.16+rand()*.08;
+      stems.push({position:[x,h/2,z],scale:[1,h/.20,1]});
+      petals.push({position:[x,h+.025,z],scale:[.9+rand()*.25,.9+rand()*.25,.9+rand()*.25]});
+      centres.push({position:[x,h+.04,z],scale:[1,1,1]});
+    }
+  }
+  root.add(instanceSet(new THREE.CylinderGeometry(.012,.016,.20,5),mats.grassShade,stems,'route-1-flower-stems',false));
+  root.add(instanceSet(new THREE.IcosahedronGeometry(.065,0),mats.petalCream,petals,'route-1-flower-petals',false));
+  root.add(instanceSet(new THREE.IcosahedronGeometry(.025,0),mats.flowerCenter,centres,'route-1-flower-centres',false));
 }
 
-function makeAnimeLedgeGeometry(width,seed){
+function makeEarthBankGeometry(width){
+  // A real terrain cross-section: it rises gently from the north/rear ground,
+  // forms a broad rounded shelf, then drops in a short south-facing cut bank.
+  // ExtrudeGeometry closes the body for us, avoiding the face-winding bugs from
+  // the previous hand-built ledge meshes.
+  const profile=new THREE.Shape();
+  profile.moveTo(-1.00,.015);
+  profile.quadraticCurveTo(-.78,.05,-.64,.17);
+  profile.quadraticCurveTo(-.48,.36,-.28,.50);
+  profile.quadraticCurveTo(-.02,.55,.18,.50);
+  profile.quadraticCurveTo(.34,.43,.44,.22);
+  profile.quadraticCurveTo(.53,.07,.68,.015);
+  profile.lineTo(-1.00,.015);
+
+  const g=new THREE.ExtrudeGeometry(profile,{
+    depth:width,
+    steps:1,
+    curveSegments:5,
+    bevelEnabled:true,
+    bevelSegments:2,
+    bevelSize:.055,
+    bevelThickness:.045,
+  });
+  // Shape x -> world Z, shape y -> world Y, extrusion Z -> world X.
+  g.rotateY(Math.PI/2);
+  g.translate(-width/2,0,0);
+  g.computeVertexNormals();
+  return g;
+}
+
+function makeTurfSurfaceGeometry(width,seed){
+  // The grass is a conforming surface on the bank itself, not a separate pad.
+  // Five profile samples let the turf roll over the shoulder and down the lip.
   const rand=seededRandom(seed);
-  const steps=Math.max(2,Math.ceil(width/.8));
-  const xs=[],heights=[],fronts=[],backs=[];
-  for(let i=0;i<=steps;i++){
-    const t=i/steps,x=-width/2+t*width;
-    const endEase=Math.sin(Math.PI*t);
-    const wave=Math.sin(t*Math.PI*2+seed*.017)*.018+Math.sin(t*Math.PI*5+seed*.031)*.010;
-    xs.push(x);
-    heights.push(.43+wave+(rand()-.5)*.012*endEase);
-    fronts.push(.25+(rand()-.5)*.025*endEase);
-    backs.push(-.34+(rand()-.5)*.018*endEase);
+  const xSteps=Math.max(4,Math.ceil(width/.8));
+  const profile=[
+    [-.69,.18],[-.50,.38],[-.29,.515],[.15,.515],[.31,.41],
+  ];
+  const positions=[],indices=[];
+
+  for(let ix=0;ix<=xSteps;ix++){
+    const t=ix/xSteps;
+    const x=-width/2+t*width;
+    const ease=Math.sin(Math.PI*t);
+    const yJitter=(rand()-.5)*.018*ease;
+    const zJitter=(rand()-.5)*.018*ease;
+    for(const [z,y] of profile)positions.push(x,y+.012+yJitter,z+zJitter);
   }
 
-  const bodyPos=[],bodyIdx=[];
-  const section=(i)=>{
-    const x=xs[i],h=heights[i],fz=fronts[i],bz=backs[i];
-    return [
-      [x,.015,bz-.17],
-      [x,h*.72,bz-.08],
-      [x,h,bz],
-      [x,h,fz-.07],
-      [x,h*.78,fz+.08],
-      [x,.015,fz+.25],
-    ];
-  };
-  for(let i=0;i<=steps;i++)for(const p of section(i))bodyPos.push(...p);
-  // Winding matters here: +Z is the south/Pallet side of each ledge. The
-  // previous order pointed the south face northward, so Three.js culled it.
-  for(let i=0;i<steps;i++){
-    const a=i*6,b=(i+1)*6;
-    for(const [p0,p1] of [[0,1],[1,2],[3,4],[4,5]])bodyIdx.push(a+p0,a+p1,b+p0,a+p1,b+p1,b+p0);
+  const row=profile.length;
+  for(let ix=0;ix<xSteps;ix++){
+    const a=ix*row,b=(ix+1)*row;
+    for(let p=0;p<row-1;p++){
+      // Wound upward (+Y): along-profile (+Z), then along-width (+X).
+      indices.push(a+p,a+p+1,b+p,a+p+1,b+p+1,b+p);
+    }
   }
-  bodyIdx.push(0,1,2,0,2,3,0,3,4,0,4,5);
-  const e=steps*6;bodyIdx.push(e,e+2,e+1,e,e+3,e+2,e,e+4,e+3,e,e+5,e+4);
-  const body=new THREE.BufferGeometry();body.setAttribute('position',new THREE.Float32BufferAttribute(bodyPos,3));body.setIndex(bodyIdx);body.computeVertexNormals();
 
-  const capPos=[],capIdx=[];
-  for(let i=0;i<=steps;i++){
-    const x=xs[i],h=heights[i]+.018;
-    capPos.push(x,h,backs[i]-.035,x,h,fronts[i]+.015);
-  }
-  // Grass cap now winds upward (+Y), not down into the terrain.
-  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;capIdx.push(a,a+1,b,a+1,b+1,b);}
-  const cap=new THREE.BufferGeometry();cap.setAttribute('position',new THREE.Float32BufferAttribute(capPos,3));cap.setIndex(capIdx);cap.computeVertexNormals();
-
-  const rimPos=[],rimIdx=[];
-  for(let i=0;i<=steps;i++){
-    const x=xs[i],h=heights[i],fz=fronts[i];
-    rimPos.push(x,h+.015,fz+.018,x,h*.82,fz+.105);
-  }
-  // The green lip is part of the south-facing silhouette too.
-  for(let i=0;i<steps;i++){const a=i*2,b=(i+1)*2;rimIdx.push(a,a+1,b,a+1,b+1,b);}
-  const rim=new THREE.BufferGeometry();rim.setAttribute('position',new THREE.Float32BufferAttribute(rimPos,3));rim.setIndex(rimIdx);rim.computeVertexNormals();
-
-  return {body,cap,rim};
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  g.setIndex(indices);g.computeVertexNormals();
+  return g;
 }
 
 function ledges(root,mats){
   const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
-  const earth=mats.soil.clone();earth.name='route-1-anime-earth';earth.color.set('#91724f');
-  const grass=mats.grass.clone();grass.name='route-1-anime-grass-cap';grass.color.set('#7fb653');
-  const grassRim=mats.grassShade.clone();grassRim.name='route-1-anime-grass-rim';grassRim.color.set('#5f9147');
+  const earth=mats.dirt.clone();earth.name='route-1-ledge-earth';earth.color.set('#a77c57');
+  const turf=mats.grass.clone();turf.name='route-1-ledge-turf';turf.color.set('#83b954');
 
   LEDGE_RUNS.forEach(([r,c0,c1],index)=>{
-    const width=(c1-c0+1)*2,left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.70;
-    const geo=makeAnimeLedgeGeometry(width,730+r*29+c0*11+index*7);
+    const width=(c1-c0+1)*2;
+    const left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.70;
+    const bank=new THREE.Mesh(makeEarthBankGeometry(width),earth);
+    bank.name='route-1-terrain-ledge-earth';bank.position.set(x,0,z);bank.castShadow=true;bank.receiveShadow=true;group.add(bank);
 
-    const body=new THREE.Mesh(geo.body,earth);body.name='route-1-anime-ledge-earth';body.position.set(x,0,z);body.castShadow=true;body.receiveShadow=true;group.add(body);
-    const cap=new THREE.Mesh(geo.cap,grass);cap.name='route-1-anime-ledge-grass';cap.position.set(x,0,z);cap.receiveShadow=true;group.add(cap);
-    const rim=new THREE.Mesh(geo.rim,grassRim);rim.name='route-1-anime-ledge-rim';rim.position.set(x,0,z);rim.receiveShadow=true;group.add(rim);
+    const grass=new THREE.Mesh(makeTurfSurfaceGeometry(width,9100+r*31+c0*17+index),turf);
+    grass.name='route-1-terrain-ledge-grass';grass.position.set(x,0,z);grass.receiveShadow=true;group.add(grass);
   });
 }
 
@@ -305,9 +321,11 @@ export function makeRoute1(scene,mats,colliders){
   const root=new THREE.Group();root.name='route-1';scene.add(root);
   if(scene.fog?.isFog){scene.fog.near=95;scene.fog.far=240;}
   buildPath(root,mats);tallGrass(root,mats);flowers(root,mats);treeSet(root,mats,colliders);ledges(root,mats);
+
   const sign=createRouteSign(mats);sign.position.set(ROUTE_1.sign.x,0,ROUTE_1.sign.z);root.add(sign);
   colliders.push({kind:'box',id:'route-1-sign',minX:-2.05,maxX:.05,minZ:-35.18,maxZ:-34.82});
   colliders.push({kind:'box',id:'route-1-west-boundary',minX:-100,maxX:-14.0,minZ:-90,maxZ:-18});
   colliders.push({kind:'box',id:'route-1-east-boundary',minX:18.0,maxX:100,minZ:-90,maxZ:-18});
+
   return {root,layout:ROUTE_1,grass:GRASS_MASK,ledges:LEDGE_RUNS};
 }
