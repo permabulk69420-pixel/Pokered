@@ -5,7 +5,7 @@ import { floorAt, moveWithNavigation, onStairs } from './navigation.js';
 export class Locomotion {
   constructor({renderer,camera,rig,colliders,navigation,canvas,onBoundary}) {
     Object.assign(this,{renderer,camera,rig,colliders,canvas,onBoundary});
-    this.navigation=navigation||{colliders};this.floorHeight=0;
+    this.navigation=navigation||{colliders};this.floorHeight=0;this.xrMoveLocked=false;
     this.keys=new Set();this.walking=false;this.pitch=0;this.yaw=0;this.touchMove={x:0,y:0};
     this.forward=new THREE.Vector3();this.right=new THREE.Vector3();this.head=new THREE.Vector3();this.pivot=new THREE.Vector3();
     this.up=new THREE.Vector3(0,1,0);this.motion=new THREE.Vector3();this.xrQuaternion=new THREE.Quaternion();this.headEuler=new THREE.Euler(0,0,0,'YXZ');
@@ -64,7 +64,7 @@ export class Locomotion {
         if(!input.gamepad)continue;
         const a=input.gamepad.axes;
         const ax=a.length>=4?a[2]:(a[0]||0),ay=a.length>=4?a[3]:(a[1]||0);
-        if(input.handedness==='left'){x=deadzone(ax);z=deadzone(ay);if(input.gamepad.buttons[3]?.pressed)speed=3.9;}
+        if(input.handedness==='left'&&!this.xrMoveLocked){x=deadzone(ax);z=deadzone(ay);if(input.gamepad.buttons[3]?.pressed)speed=3.9;}
         if(input.handedness==='right')turn=-deadzone(ax)*1.45;
       }
       // Wait for the first tracked pose before aligning the physical play space.
