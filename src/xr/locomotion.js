@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { moveWithCollisions, deadzone } from './collision.js';
+import { deadzone } from './collision.js';
+import { floorAt, moveWithNavigation, onStairs } from './navigation.js';
 
 export class Locomotion {
-  constructor({renderer,camera,rig,colliders,canvas,onBoundary}) {
+  constructor({renderer,camera,rig,colliders,navigation,canvas,onBoundary}) {
     Object.assign(this,{renderer,camera,rig,colliders,canvas,onBoundary});
+    this.navigation=navigation||{colliders};this.floorHeight=0;
     this.keys=new Set();this.walking=false;this.pitch=0;this.yaw=0;this.touchMove={x:0,y:0};
     this.forward=new THREE.Vector3();this.right=new THREE.Vector3();this.head=new THREE.Vector3();this.pivot=new THREE.Vector3();
     this.up=new THREE.Vector3(0,1,0);this.motion=new THREE.Vector3();this.xrQuaternion=new THREE.Quaternion();this.headEuler=new THREE.Euler(0,0,0,'YXZ');
@@ -33,9 +35,17 @@ export class Locomotion {
     const releaseLook=e=>{if(e.pointerId===lookId)lookId=null;};this.canvas.addEventListener('pointerup',releaseLook);this.canvas.addEventListener('pointercancel',releaseLook);
   }
   spawn(spawn,xr=false) {
-    this.yaw=spawn.yaw;this.pitch=0;this.rig.rotation.set(0,this.yaw,0);this.rig.position.set(spawn.x,0,spawn.z);
+    this.floorHeight=spawn.y||0;this.yaw=spawn.yaw;this.pitch=0;this.rig.rotation.set(0,this.yaw,0);this.rig.position.set(spawn.x,this.floorHeight,spawn.z);
     this.camera.position.set(0,xr?0:1.65,0);this.camera.rotation.set(0,0,0);this.clearInput();
     this.needsXRSpawn=xr?spawn:null;
+  }
+  setNavigation(navigation){this.navigation=navigation;this.colliders=navigation.colliders;}
+  relocate(arrival) {
+    // Keep heading, pitch and the physical tracking offset through doorways.
+    this.rig.updateMatrixWorld(true);this.camera.getWorldPosition(this.head);
+    this.rig.position.x+=arrival.x-this.head.x;this.rig.position.z+=arrival.z-this.head.z;
+    this.floorHeight=arrival.y||0;this.rig.position.y=this.floorHeight;
+    this.rig.updateMatrixWorld(true);
   }
   // Turning rotates the rig about the user's actual head, including room-scale offset.
   rotateAroundHead(angle) {
@@ -60,7 +70,7 @@ export class Locomotion {
       // Wait for the first tracked pose before aligning the physical play space.
       if(this.needsXRSpawn) {
         const p=this.needsXRSpawn;this.rig.updateMatrixWorld(true);this.camera.getWorldPosition(this.head);
-        if(this.head.y>.2) {
+        if(this.head.y-this.floorHeight>.2) {
           this.camera.getWorldQuaternion(this.xrQuaternion);this.headEuler.setFromQuaternion(this.xrQuaternion,'YXZ');
           this.rotateAroundHead(p.yaw-this.headEuler.y);
           this.camera.getWorldPosition(this.head);this.rig.position.x+=p.x-this.head.x;this.rig.position.z+=p.z-this.head.z;
@@ -74,15 +84,21 @@ export class Locomotion {
       if(this.keys.has('ShiftLeft')||this.keys.has('ShiftRight'))speed=4;
     }
     if(turn) this.rotateAroundHead(turn*dt);
+    this.rig.updateMatrixWorld(true);this.camera.getWorldPosition(this.head);
+    // Room-scale movement along the ramp also updates the virtual floor.
+    const physicalFloor=floorAt(this.navigation,this.head.x,this.head.z,this.floorHeight);
+    if(Math.abs(physicalFloor-this.floorHeight)<.18){this.floorHeight=physicalFloor;this.rig.position.y=physicalFloor;}
     if(!x&&!z)return;
+    if(onStairs(this.navigation.stairs,this.head.x,this.head.z))speed=Math.min(speed,1.65);
     this.rig.updateMatrixWorld(true);this.camera.getWorldDirection(this.forward);this.forward.y=0;
     if(this.forward.lengthSq()<.001)this.forward.set(-Math.sin(this.rig.rotation.y),0,-Math.cos(this.rig.rotation.y));else this.forward.normalize();
     this.right.crossVectors(this.forward,this.up).normalize();
     this.motion.copy(this.right).multiplyScalar(x).addScaledVector(this.forward,-z);
     if(this.motion.lengthSq()>1)this.motion.normalize();this.motion.multiplyScalar(speed*dt);
     this.camera.getWorldPosition(this.head);
-    const next=moveWithCollisions(this.head.x,this.head.z,this.motion.x,this.motion.z,this.colliders);
+    const next=moveWithNavigation(this.head.x,this.head.z,this.floorHeight,this.motion.x,this.motion.z,this.navigation);
     this.rig.position.x+=next.x-this.head.x;this.rig.position.z+=next.z-this.head.z;
+    this.floorHeight=next.y;this.rig.position.y=next.y;
     if(next.blocked)this.onBoundary?.(next.blocked);
   }
 }

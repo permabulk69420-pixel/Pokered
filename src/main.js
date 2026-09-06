@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import './style.css';
-import { createPalletTown } from './world/pallet-town.js';
+import { WorldSpaces, DoorwayTransition } from './world/spaces.js';
 import { Locomotion } from './xr/locomotion.js';
 import { setupHands } from './xr/hands.js';
 
-const BUILD='PALLET 01 · 2026.09.05';
+const BUILD='PALLET 02 · INTERIORS · 2026.09.06';
 const canvas=document.querySelector('#world'),intro=document.querySelector('#intro'),walkButton=document.querySelector('#walk-button'),vrButton=document.querySelector('#vr-button'),menuButton=document.querySelector('#menu-button');
 const params=new URLSearchParams(location.search),touch=matchMedia('(pointer:coarse)').matches;
 let renderer;
@@ -24,17 +24,23 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.xr.enabled=true;renderer.xr.setReferenceSpaceType('local-floor');renderer.xr.setFramebufferScaleFactor(1);renderer.xr.setFoveation(.7);
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.06,450),rig=new THREE.Group();
 rig.name='player-rig';camera.name='player-head';rig.add(camera);scene.add(rig);
-const town=createPalletTown(scene);
+const spaces=new WorldSpaces(scene,{onChange:()=>{renderer.shadowMap.needsUpdate=true;}}),town=spaces.town;
+const transition=new DoorwayTransition(camera);
 const clock=new THREE.Clock();let elapsed=0,mode='overview',toastTimer,statsTime=0,lastBoundary=0,session=null,returnPose=null;
 const overviewPosition=new THREE.Vector3(-30,24,34),overviewTarget=new THREE.Vector3(0,0,-1.5);
 function toast(text) {const el=document.querySelector('#toast');el.textContent=text;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),3500);}
-const locomotion=new Locomotion({renderer,camera,rig,colliders:town.colliders,canvas,onBoundary:id=> {
+const locomotion=new Locomotion({renderer,camera,rig,colliders:town.colliders,navigation:spaces.current.navigation,canvas,onBoundary:id=> {
   if(elapsed-lastBoundary<5)return;
   if(id==='route-1-boundary'){toast('Route 1 comes later. For now, enjoy Pallet Town.');lastBoundary=elapsed;}
   if(id==='water'){toast('The water’s edge — Route 21 comes later.');lastBoundary=elapsed;}
 }});
+function activateSpace(id) {
+  const space=spaces.activate(id);locomotion.setNavigation(space.navigation);
+  document.querySelector('#location-name').textContent=space.spec?.label.toUpperCase()||'PALLET TOWN';
+}
 
 function overview() {
+  transition.cancel();activateSpace('pallet-town');locomotion.floorHeight=0;
   mode='overview';locomotion.walking=false;locomotion.clearInput();rig.position.set(0,0,0);rig.rotation.set(0,0,0);
   const portrait=innerHeight>innerWidth;
   camera.fov=portrait?64:54;camera.position.copy(overviewPosition);if(portrait)camera.position.set(-32,31,43);
@@ -43,6 +49,7 @@ function overview() {
   document.querySelector('#walk-hud').hidden=true;document.querySelector('#touch-controls').hidden=true;
 }
 function walk(lock=true) {
+  transition.cancel();activateSpace('pallet-town');
   mode='walk';locomotion.walking=true;
   camera.fov=72;camera.updateProjectionMatrix();locomotion.spawn(town.layout.spawns.start);
   document.body.classList.add('walking');intro.hidden=true;menuButton.hidden=false;
@@ -64,10 +71,11 @@ async function checkVR() {
   vrButton.addEventListener('click',async()=> {
     vrButton.disabled=true;
     try {
-      returnPose={position:rig.position.clone(),yaw:locomotion.yaw,pitch:locomotion.pitch,mode};
+      returnPose={position:rig.position.clone(),yaw:locomotion.yaw,pitch:locomotion.pitch,mode,space:spaces.active,floorHeight:locomotion.floorHeight};
       const xrSession=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
       session=xrSession;
       await renderer.xr.setSession(xrSession);
+      transition.cancel();activateSpace('pallet-town');
       locomotion.spawn(town.layout.spawns.start,true);locomotion.walking=true;
       renderer.xr.setFoveation(.7);
       const rates=xrSession.supportedFrameRates;if(rates&&[...rates].includes(72))try{await xrSession.updateTargetFrameRate(72);}catch{}
@@ -84,7 +92,7 @@ renderer.xr.addEventListener('sessionend',()=> {
   session=null;document.body.classList.remove('xr');vrButton.disabled=false;locomotion.needsXRSpawn=null;
   // Restore a clean desktop camera; XR's final tracked height must not leak out.
   if(returnPose?.mode==='walk'){
-    walk(false);rig.position.copy(returnPose.position);locomotion.yaw=returnPose.yaw;locomotion.pitch=returnPose.pitch;rig.rotation.y=locomotion.yaw;camera.rotation.x=locomotion.pitch;
+    walk(false);activateSpace(returnPose.space);rig.position.copy(returnPose.position);locomotion.floorHeight=returnPose.floorHeight;locomotion.yaw=returnPose.yaw;locomotion.pitch=returnPose.pitch;rig.rotation.y=locomotion.yaw;camera.rotation.x=locomotion.pitch;
   }else overview();
 });
 setupHands(renderer,rig).catch(error=>console.warn('Hands setup:',error));
@@ -102,6 +110,16 @@ if(params.get('view')==='walk')walk(false);
 if(params.get('view')==='lab'){walk(false);locomotion.spawn({x:1.0,z:9.0,yaw:-.69});}
 if(params.get('view')==='home'){walk(false);locomotion.spawn({x:-12.8,z:-2.0,yaw:-.60});}
 if(params.get('view')==='shore'){walk(false);locomotion.spawn({x:-8,z:8.7,yaw:Math.PI});}
+const indoorViews={
+  'red-interior':{space:'reds-house',x:-1.2,z:3.95,yaw:0},
+  'bedroom':{space:'reds-house',x:2.05,z:3.6,y:3.05,yaw:.72},
+  'blue-interior':{space:'blues-house',x:1.3,z:3.6,yaw:.38},
+  'lab-interior':{space:'oaks-lab',x:0,z:5.9,yaw:0},
+  'starters':{space:'oaks-lab',x:-1.35,z:-.95,yaw:-.95},
+};
+if(indoorViews[params.get('view')]){
+  const view=indoorViews[params.get('view')];walk(false);activateSpace(view.space);locomotion.spawn(view);
+}
 if(params.get('view')==='map') {
   camera.position.set(0,62,.01);camera.lookAt(0,0,0);camera.fov=40;camera.updateProjectionMatrix();
 }
@@ -112,16 +130,24 @@ if(params.has('clean')) {
 // Read-only diagnostic snapshot is useful when checking a Quest build remotely.
 // There is no gameplay state or saved progression in this visual slice.
 const diagnostic={build:BUILD,ready:false,mode,renderer:'WebGL2',staticShadows:true};
-Object.defineProperty(window,'PALLET_DIAGNOSTICS',{get:()=>Object.freeze({...diagnostic,mode,xr:renderer.xr.isPresenting,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,player:rig.position.toArray(),yaw:rig.rotation.y})});
+Object.defineProperty(window,'PALLET_DIAGNOSTICS',{get:()=>Object.freeze({...diagnostic,mode,space:spaces.active,floorHeight:locomotion.floorHeight,transition:transition.state,xr:renderer.xr.isPresenting,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,player:rig.position.toArray(),yaw:rig.rotation.y})});
 renderer.setAnimationLoop(()=> {
   const dt=Math.min(clock.getDelta(),.045);elapsed+=dt;
-  locomotion.update(dt);town.update(elapsed);
+  if(renderer.xr.isPresenting){rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);}
+  transition.update(dt);
+  if(!transition.busy)locomotion.update(dt);
+  if(!transition.busy&&!locomotion.needsXRSpawn&&(mode==='walk'||renderer.xr.isPresenting)){
+    rig.updateMatrixWorld(true);camera.getWorldPosition(locomotion.head);
+    const door=spaces.doorway(locomotion.head.x,locomotion.head.z,locomotion.floorHeight);
+    if(door)transition.begin(()=>{activateSpace(door.id);locomotion.relocate(door.arrival);});
+  }
+  spaces.update(elapsed);
   renderer.render(scene,camera);
   // Architecture and lighting are static. Keep the shadow atlas rather than
   // re-rendering every tree and tile for every frame or every eye.
   if(renderer.shadowMap.autoUpdate)renderer.shadowMap.autoUpdate=false;
   if(!diagnostic.ready){diagnostic.ready=true;walkButton.disabled=false;walkButton.textContent='Walk around';document.body.dataset.ready='true';}
-  if(debug&&elapsed-statsTime>.5){statsTime=elapsed;document.querySelector('#stats').textContent=`${BUILD}\n${renderer.info.render.calls} draw calls · ${renderer.info.render.triangles.toLocaleString()} triangles\n${renderer.info.memory.geometries} geometries · ${renderer.info.memory.textures} textures\n${renderer.xr.isPresenting?'Immersive VR':'Desktop preview'} · static shadows`;}
+  if(debug&&elapsed-statsTime>.5){statsTime=elapsed;document.querySelector('#stats').textContent=`${BUILD}\n${spaces.active} · floor ${locomotion.floorHeight.toFixed(2)} m\n${renderer.info.render.calls} draw calls · ${renderer.info.render.triangles.toLocaleString()} triangles\n${renderer.info.memory.geometries} geometries · ${renderer.info.memory.textures} textures\n${renderer.xr.isPresenting?'Immersive VR':'Desktop preview'} · static shadows`;}
 });
 checkVR();
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();renderer.setAnimationLoop(null);toast('The graphics session was interrupted. Reload the page to resume.');});

@@ -50,8 +50,12 @@ function roof(b,{w,d,y,rise,lab=false}) {
 
 function door(group,b,{x,z,accent,mats,lab=false}) {
   const width=lab?1.35:1.02, height=2.18;
-  b.box(width+.27,height+.2,.18,x,height/2+.18,z,'trim');
-  b.box(width+.1,height+.05,.10,x,height/2+.11,z+.04,'woodDark');
+  for(const side of [-1,1])b.box(.13,height+.2,.20,x+side*(width/2+.065),height/2+.1,z,'trim');
+  b.box(width+.27,.15,.20,x,height+.18,z,'trim');
+  // Open, recessed threshold. The separate interior begins as you walk in.
+  b.box(width,.035,1.22,x,.012,z-.54,'woodLight');
+  b.box(width,2.30,.065,x,1.15,z-1.19,'woodDark');
+  b.box(width-.08,2.10,.015,x,1.08,z-1.15,'woodLight');
   const pivot=new THREE.Group();pivot.name='door-hinge';pivot.position.set(x-width/2,.12,z+.14);
   const db=new Builder(pivot,mats);
   db.box(width,height,.105,width/2,height/2,0,accent);
@@ -62,17 +66,26 @@ function door(group,b,{x,z,accent,mats,lab=false}) {
   db.box(.045,.83,.07,width-.10,height-.58,.072,'trimShade');
   db.box(width-.25,.65,.05,width/2,.48,.068,accent);
   db.sphere(.055,width-.15,1.05,.11,'brass',[1,1,.65],8);
-  db.finish();group.add(pivot);
+  db.finish();pivot.rotation.y=-Math.PI*.54;group.add(pivot);
   b.roundBox(width+1.0,.13,.68,.045,x,.065,z+.3,'stoneLight');
   b.roundBox(width+1.5,.06,.98,.025,x,.025,z+.43,'stone');
   return pivot;
 }
 
-function wallDetail(b,w,d,h) {
-  b.box(w+.10,.32,d+.10,0,.17,0,'foundation');
-  b.box(w+.08,.10,d+.08,0,.36,0,'trimShade');
+function wallDetail(b,w,d,h,doorX,doorWidth) {
+  const split=(width,height,depth,y,z,mat)=>{
+    const left=doorX-doorWidth/2+width/2,right=width/2-doorX-doorWidth/2;
+    b.box(left,height,depth,-width/2+left/2,y,z,mat);
+    b.box(right,height,depth,doorX+doorWidth/2+right/2,y,z,mat);
+  };
+  // Split the front foundation and siding around the usable opening.
+  split(w+.10,.32,d+.10,.17,0,'foundation');
+  split(w+.08,.10,d+.08,.36,0,'trimShade');
+  b.box(doorWidth,.32,d-1.15,doorX,.17,-.625,'foundation');
+  b.box(doorWidth,.10,d-1.17,doorX,.36,-.625,'trimShade');
   for(let y=.7;y<h;y+=.39) {
-    b.box(w,.035,.032,0,y,d/2+.015,'plasterShadow');
+    if(y<2.35)split(w,.035,.032,y,d/2+.015,'plasterShadow');
+    else b.box(w,.035,.032,0,y,d/2+.015,'plasterShadow');
     b.box(w,.035,.032,0,y,-d/2-.015,'plasterShadow');
     for(const side of [-1,1]) b.box(.032,.035,d,side*(w/2+.015),y,0,'plasterShadow');
   }
@@ -83,7 +96,12 @@ export function createBuilding(spec,mats) {
   const root=new THREE.Group();root.name=spec.id;root.position.set(spec.x,0,spec.z);
   const b=new Builder(root,mats), lab=spec.kind==='lab';
   const w=spec.width,d=spec.depth,h=lab?4.3:4.55;
-  b.box(w,h,d,0,h/2,0,'plaster');wallDetail(b,w,d,h);
+  const dx=spec.doorX-spec.x,dw=lab?1.35:1.02,left=dx-dw/2+w/2,right=w/2-dx-dw/2;
+  b.box(left,h,d,-w/2+left/2,h/2,0,'plaster');
+  b.box(right,h,d,dx+dw/2+right/2,h/2,0,'plaster');
+  b.box(dw,h-2.35,d,dx,2.35+(h-2.35)/2,0,'plaster');
+  b.box(dw,2.35,d-1.25,dx,1.175,-.625,'plaster');
+  wallDetail(b,w,d,h,dx,dw);
   // The low front awning and upper window row recall the original Game Boy sprite.
   b.box(w+.25,.16,d+.2,0,2.78,0,'trim');
   if(!lab) {
@@ -141,6 +159,6 @@ export function createBuilding(spec,mats) {
     b.cylinder(.036,.036,.035,x,2.98,d/2+.30,'trim',12,[Math.PI/2,0,0]);
   }
   b.finish();
-  root.userData={id:spec.id,kind:spec.kind,doorNode:pivot.name,interaction:'door',implemented:false};
+  root.userData={id:spec.id,kind:spec.kind,doorNode:pivot.name,interaction:'door',open:true,interior:spec.id,implemented:false};
   return root;
 }

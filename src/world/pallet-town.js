@@ -6,6 +6,7 @@ import { PALLET_TOWN, tileToWorld } from './layout.js';
 import { createBuilding } from './buildings.js';
 import { makeLandscape, makeTrees, makeGardensAndGrass, makeSky } from './landscape.js';
 import { addResidents } from './residents.js';
+import { exteriorDoorColliders } from './interiors/layout.js';
 
 export function createPalletTown(scene) {
   const mats=makeMaterials(),colliders=[];
@@ -22,7 +23,7 @@ export function createPalletTown(scene) {
   const buildings=new Map();
   for(const spec of PALLET_TOWN.buildings) {
     const group=createBuilding(spec,mats);collapseBuilding(group);scene.add(group);buildings.set(spec.id,group);
-    colliders.push({kind:'box',id:spec.id,minX:spec.x-spec.width/2-.08,maxX:spec.x+spec.width/2+.08,minZ:spec.z-spec.depth/2-.1,maxZ:spec.z+spec.depth/2+.13});
+    colliders.push(...exteriorDoorColliders(spec));
   }
   const signs=new THREE.Group();signs.name='original-map-signs';scene.add(signs);
   for(const spec of PALLET_TOWN.signs) {
