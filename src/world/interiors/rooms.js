@@ -1,3 +1,4 @@
+import { buildViridianRoom } from './viridian-rooms.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Builder, faceGeometry } from '../geometry.js';
@@ -311,12 +312,15 @@ export function createInterior(id) {
   const spec=INTERIORS[id];if(!spec)throw new Error(`Unknown interior: ${id}`);
   const root=new THREE.Group();root.name=`interior-${id}`;
   const mats=makeInteriorMaterials(),nav={colliders:[],stairs:spec.stairs};
-  const ctx={root,mats,nav,spec};shell(ctx);
-  if(id==='reds-house')redHouse(ctx);else if(id==='blues-house')blueHouse(ctx);else oakLab(ctx);
+  const ctx={root,mats,nav,spec};
+  if(spec.viridian)buildViridianRoom(ctx);else {shell(ctx);
+  if(id==='reds-house')redHouse(ctx);else if(id==='blues-house')blueHouse(ctx);else oakLab(ctx);}
   batchRoom(root);
   const fill=new THREE.HemisphereLight('#eef3e6','#9a947e',1.1);fill.name='indoor-bounce';root.add(fill);
   const sun=new THREE.DirectionalLight('#fff0d4',1.4);sun.name='indoor-daylight';sun.position.set(-5,11,6);sun.target.position.set(0,1,0);
   sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.normalBias=.022;sun.shadow.bias=-.00015;
-  Object.assign(sun.shadow.camera,{left:-10,right:10,top:10,bottom:-10,near:.2,far:32});root.add(sun,sun.target);
+  const extent=spec.theme==='gym'?18:10;
+  if(spec.theme==='gym')sun.position.set(-8,18,10);
+  Object.assign(sun.shadow.camera,{left:-extent,right:extent,top:extent,bottom:-extent,near:.2,far:spec.theme==='gym'?55:32});root.add(sun,sun.target);
   return {root,spec,navigation:nav,background:new THREE.Color('#e6e1cd'),fog:null,sun};
 }

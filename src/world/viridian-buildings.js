@@ -15,7 +15,7 @@ function lettering(root,text,x,y,z,width,height,mats){
 }
 
 export function createViridianBuilding(spec,mats){
-  if(spec.kind==='house')return createBuilding({...spec,exteriorOnly:true},mats);
+  if(spec.kind==='house')return createBuilding({...spec,exteriorOnly:false},mats);
   const root=new THREE.Group();root.name=spec.id;root.position.set(spec.x,0,spec.z);
   const b=new Builder(root,mats),w=spec.width,d=spec.depth,h=spec.kind==='gym'?4.5:4.3,front=d/2;
   const palette={...mats};
@@ -24,26 +24,29 @@ export function createViridianBuilding(spec,mats){
   }else if(spec.kind==='gym'){
     palette.roof=mats.teal;palette.roofLight=mats.teal.clone();palette.roofLight.color.set('#6a9e93');palette.roofDark=mats.labRoofDark;
   }
-  b.box(w,h,d,0,h/2,0,'plaster');
-  b.box(w+.1,.30,d+.1,0,.15,0,'foundation');
+  const dx=spec.doorX-spec.x,dw=1.44,left=dx-dw/2+w/2,right=w/2-dx-dw/2;
+  b.box(left,h,d,-w/2+left/2,h/2,0,'plaster');b.box(right,h,d,dx+dw/2+right/2,h/2,0,'plaster');
+  b.box(dw,h-2.35,d,dx,2.35+(h-2.35)/2,0,'plaster');b.box(dw,2.35,d-1.25,dx,1.175,-.625,'plaster');
+  for(const [width,x] of [[left,-w/2+left/2],[right,dx+dw/2+right/2]])b.box(width,.30,d+.1,x,.15,0,'foundation');
+  b.box(dw,.30,d-1.25,dx,.15,-.675,'foundation');
   for(let y=.48;y<h;y+=.39){
-    b.box(w,.035,.035,0,y,front+.02,'plasterShadow');
+    if(y<2.35){b.box(left,.035,.035,-w/2+left/2,y,front+.02,'plasterShadow');b.box(right,.035,.035,dx+dw/2+right/2,y,front+.02,'plasterShadow');}
+    else b.box(w,.035,.035,0,y,front+.02,'plasterShadow');
     b.box(w,.035,.035,0,y,-front-.02,'plasterShadow');
     for(const side of [-1,1])b.box(.035,.035,d,side*(w/2+.02),y,0,'plasterShadow');
   }
   for(const x of [-w/2,w/2])for(const z of [-front,front])b.box(.2,h,.2,x,h/2,z,'trim');
   b.box(w+.25,.16,d+.25,0,2.82,0,spec.accent);
-  const dx=spec.doorX-spec.x;
   for(const side of [-1,1])b.box(.14,2.36,.2,dx+side*.75,1.18,front+.09,'trim');
   b.box(1.64,.15,.22,dx,2.38,front+.10,'trim');
-  b.box(1.36,2.22,.12,dx,1.15,front+.08,'windowDark');
+  b.box(dw,.025,1.25,dx,.01,front-.60,'woodLight');b.box(dw,2.3,.04,dx,1.15,front-1.20,'woodDark');
   for(const side of [-1,1]){
-    b.box(.64,2.15,.07,dx+side*.34,1.15,front+.16,spec.accent);
-    b.box(.48,1.08,.035,dx+side*.34,1.59,front+.21,'glass');
-    b.box(.04,.38,.06,dx+side*.10,1.10,front+.26,'brass');
-    b.box(.47,.055,.045,dx+side*.34,1.09,front+.24,'trim');
+    const hinge=new THREE.Group();hinge.name='door-hinge';hinge.position.set(dx+side*.68,.075,front+.16);hinge.rotation.y=side*Math.PI*.54;root.add(hinge);
+    const db=new Builder(hinge,mats),cx=-side*.34;
+    db.box(.64,2.15,.07,cx,1.075,0,spec.accent);db.box(.48,1.08,.035,cx,1.515,.05,'glass');
+    db.box(.04,.38,.06,-side*.58,1.025,.10,'brass');db.box(.47,.055,.045,cx,1.015,.08,'trim');db.finish();
   }
-  // Flat accessible aprons; these doors have no trigger until interiors exist.
+  // Flat accessible aprons and open leaves, matching Pallet’s walk-through entrances.
   b.roundBox(2.05,.06,1.02,.04,dx,.025,front+.49,'stoneLight');
   for(let x=-w/2+.85;x<w/2-.6;x+=1.45){
     if(Math.abs(x-dx)>1.45)windowFront(b,x,1.65,front+.035,.95,1.25,spec.accent);
@@ -60,6 +63,6 @@ export function createViridianBuilding(spec,mats){
   b.finish();
   const roofBuilder=new Builder(root,palette);roof(roofBuilder,{w,d,y:h,rise:spec.kind==='gym'?1.9:1.45});roofBuilder.finish();
   lettering(root,spec.kind==='gym'?'VIRIDIAN GYM':spec.kind==='mart'?'POKÉ MART':'POKÉMON CENTER',0,2.97,front+.24,spec.kind==='gym'?6.2:5.1,.48,mats);
-  root.userData={id:spec.id,kind:spec.kind,exteriorOnly:true,implemented:false};
+  root.userData={id:spec.id,kind:spec.kind,exteriorOnly:false,interior:spec.id,open:true,implemented:true};
   return root;
 }

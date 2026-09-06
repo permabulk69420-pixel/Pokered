@@ -1,5 +1,8 @@
 # Viridian City exterior pass — 6 September 2026
 
+Historical notes for the exterior pass. All five buildings now have open
+entrances and furnished rooms; see [the interior update](VIRIDIAN_INTERIORS.md).
+
 Viridian City joins the **existing Route 1** at z = −90 in the same outdoor
 scene. There is no area loading or relocation when walking into the city.
 Pallet Town, its interiors, the recent window updates and Route 1 remain present.

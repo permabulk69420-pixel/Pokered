@@ -12,6 +12,7 @@ export class WorldSpaces {
     this.scene=scene;this.onChange=onChange;this.active='pallet-town';
     const townRoot=new THREE.Group();townRoot.name='pallet-town';scene.add(townRoot);
     this.town=createPalletTown(townRoot);
+    this.exteriors=[...this.town.layout.buildings,...this.town.viridian.layout.buildings];
     this.spaces=new Map([['pallet-town',{
       root:townRoot,navigation:{colliders:this.town.colliders},
       background:townRoot.background,fog:townRoot.fog,
@@ -34,11 +35,11 @@ export class WorldSpaces {
   }
   doorway(x,z,height) {
     if(this.active==='pallet-town'){
-      const id=entranceAt(this.town.layout.buildings,x,z);
+      const id=entranceAt(this.exteriors,x,z);
       return id?{id,arrival:interiorArrival(INTERIORS[id])}:null;
     }
     if(atInteriorExit(this.current.spec,x,z,height)){
-      const outside=this.town.layout.buildings.find(b=>b.id===this.active);
+      const outside=this.exteriors.find(b=>b.id===this.active);
       return {id:'pallet-town',arrival:exteriorArrival(outside)};
     }
     return null;
