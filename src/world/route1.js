@@ -271,15 +271,27 @@ function ledges(root,mats) {
     const width=(c1-c0+1)*2;
     const left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2;
     const z=Z0+r*2+.70;
-    b.roundBox(width,.22,.52,.06,x,.11,z,'soil');
-    b.roundBox(width+.10,.075,.62,.035,x,.255,z-.015,'edge');
-    for(let dx=-width/2+.34;dx<width/2-.10;dx+=.58) b.box(.035,.13,.035,x+dx,.31,z-.02,'grassShade');
+
+    // A clean low earthen bank. The previous grassShade spikes along the top
+    // looked like green pegs in VR, so the ledge is now defined by three broad
+    // surfaces instead of dozens of tiny decorative meshes.
+    b.roundBox(width,.32,.74,.08,x,.16,z,'soil');
+    b.roundBox(width-.08,.10,.60,.05,x,.355,z-.035,'edge');
+    b.roundBox(width-.16,.13,.16,.04,x,.13,z+.31,'stoneDark');
   }
   b.finish({shadows:false});
 }
 
 export function makeRoute1(scene,mats,colliders) {
   const root=new THREE.Group();root.name='route-1';scene.add(root);
+
+  // Pallet's original haze started only 46 m from the player. Route 1 is 72 m
+  // long, so that old town-scale fog made its northern half appear to vanish.
+  // Keep atmospheric depth, but let the complete route read from its south end.
+  if(scene.fog?.isFog) {
+    scene.fog.near=95;
+    scene.fog.far=240;
+  }
 
   buildPath(root,mats);
   tallGrass(root,mats);
