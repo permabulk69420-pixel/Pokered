@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -19,6 +19,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure VR hand assets are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/assets/hands
+          changed=0
+          if [ ! -f public/assets/hands/LeftHand.glb ]; then
+            curl --fail --location --silent --show-error \
+              https://raw.githubusercontent.com/permabulk69420-pixel/dumbgame/main/assets/models/hands/LeftHand.glb \
+              --output public/assets/hands/LeftHand.glb
+            changed=1
+          fi
+          if [ ! -f public/assets/hands/RightHand.glb ]; then
+            curl --fail --location --silent --show-error \
+              https://raw.githubusercontent.com/permabulk69420-pixel/dumbgame/main/assets/models/hands/RightHand.glb \
+              --output public/assets/hands/RightHand.glb
+            changed=1
+          fi
+          if [ "$changed" -eq 1 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add public/assets/hands/LeftHand.glb public/assets/hands/RightHand.glb
+            git commit -m "Add VR hand models from dumbgame"
+            if ! git push; then
+              echo "::warning::Hand GLBs were included in this deployment but could not be persisted to main."
+            fi
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22

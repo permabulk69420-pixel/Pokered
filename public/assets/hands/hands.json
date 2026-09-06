@@ -1,8 +1,9 @@
 {
-  "left": null,
-  "right": null,
+  "left": "LeftHand.glb",
+  "right": "RightHand.glb",
   "scale": 1,
-  "rotation": [0, 0, 0],
+  "leftRotation": [0, 0, 1.5707963267948966],
+  "rightRotation": [0, 0, -1.5707963267948966],
   "leftOffset": [0, 0, 0],
   "rightOffset": [0, 0, 0]
 }

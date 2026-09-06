@@ -27,7 +27,7 @@ const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(58,innerWidth/i
 rig.name='player-rig';camera.name='player-head';rig.add(camera);scene.add(rig);
 const spaces=new WorldSpaces(scene,{onChange:()=>{renderer.shadowMap.needsUpdate=true;}}),town=spaces.town;
 const transition=new DoorwayTransition(camera);
-const clock=new THREE.Clock();let elapsed=0,mode='overview',toastTimer,statsTime=0,lastBoundary=0,session=null,returnPose=null;
+const clock=new THREE.Clock();let elapsed=0,mode='overview',toastTimer,statsTime=0,lastBoundary=0,session=null,returnPose=null,handSystem=null;
 const overviewPosition=startInViridian?new THREE.Vector3(-45,48,-66):new THREE.Vector3(-30,24,34),overviewTarget=startInViridian?new THREE.Vector3(1,0,-129):new THREE.Vector3(0,0,-1.5);
 if(startInViridian){document.querySelector('h1').innerHTML='Viridian City<span class="title-period">.</span>';document.querySelector('.subtitle').textContent='The Eternally Green Paradise.';}
 function toast(text) {const el=document.querySelector('#toast');el.textContent=text;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),3500);}
@@ -97,7 +97,7 @@ renderer.xr.addEventListener('sessionend',()=> {
     walk(false);activateSpace(returnPose.space);rig.position.copy(returnPose.position);locomotion.floorHeight=returnPose.floorHeight;locomotion.yaw=returnPose.yaw;locomotion.pitch=returnPose.pitch;rig.rotation.y=locomotion.yaw;camera.rotation.x=locomotion.pitch;
   }else overview();
 });
-setupHands(renderer,rig).catch(error=>console.warn('Hands setup:',error));
+setupHands(renderer,rig).then(system=>{handSystem=system;}).catch(error=>console.warn('Hands setup:',error));
 
 window.addEventListener('resize',()=> {
   if(renderer.xr.isPresenting)return;
@@ -141,6 +141,7 @@ Object.defineProperty(window,'PALLET_DIAGNOSTICS',{get:()=>Object.freeze({...dia
 renderer.setAnimationLoop(()=> {
   const dt=Math.min(clock.getDelta(),.045);elapsed+=dt;
   if(renderer.xr.isPresenting){rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);}
+  handSystem?.update(dt);
   transition.update(dt);
   if(!transition.busy)locomotion.update(dt);
   if(!transition.busy&&!locomotion.needsXRSpawn&&(mode==='walk'||renderer.xr.isPresenting)){
