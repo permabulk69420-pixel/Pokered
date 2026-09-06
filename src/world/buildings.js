@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Builder, faceGeometry } from './geometry.js';
 
-function windowFront(b,x,y,z,w=1.22,h=1.18,accent='shutter',shutters=false) {
+export function windowFront(b,x,y,z,w=1.22,h=1.18,accent='shutter',shutters=false) {
   b.box(w+.22,h+.23,.15,x,y,z,'trimShade');
   b.box(w,h,.13,x,y,z+.085,'windowDark');
   b.box(w-.13,h-.13,.05,x,y,z+.16,'glass');
@@ -18,7 +18,7 @@ function windowFront(b,x,y,z,w=1.22,h=1.18,accent='shutter',shutters=false) {
   }
 }
 
-function roof(b,{w,d,y,rise,lab=false}) {
+export function roof(b,{w,d,y,rise,lab=false}) {
   const colors = lab ? ['labRoof','labRoofLight','labRoofDark'] : ['roof','roofLight','roofDark'];
   const over=.43, half=d/2+over, rw=w+over*2;
   const angle=Math.atan2(rise,half), slope=Math.hypot(rise,half);
@@ -159,6 +159,7 @@ export function createBuilding(spec,mats) {
     b.cylinder(.036,.036,.035,x,2.98,d/2+.30,'trim',12,[Math.PI/2,0,0]);
   }
   b.finish();
+  if(spec.exteriorOnly)pivot.rotation.y=0;
   root.userData={id:spec.id,kind:spec.kind,doorNode:pivot.name,interaction:'door',open:true,interior:spec.id,implemented:false};
   return root;
 }

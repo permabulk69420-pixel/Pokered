@@ -1,4 +1,11 @@
-# Pokered — Pallet Town VR
+# Pokered — Kanto VR
+
+**New: Viridian City exteriors**, connected continuously to the existing Route 1.
+Walk north from Pallet, or [start in Viridian](https://permabulk69420-pixel.github.io/Pokered/?start=viridian).
+Includes the Pokémon Center, Mart, two houses, Gym, pond, cliffs, fences and
+flowers. No new interiors or NPCs. See [Viridian details and previews](docs/VIRIDIAN.md).
+
+The original Pallet build notes follow.
 
 A small, standalone Three.js / WebXR remaster study of Pokémon Red's Pallet Town,
 intended for Meta Quest 3. Explore the town, both floors of Red's house, Blue's

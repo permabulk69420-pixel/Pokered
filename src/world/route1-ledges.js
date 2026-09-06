@@ -240,7 +240,7 @@ function makeTuftGeometry(seed){
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setIndex(indices);g.computeVertexNormals();return g;
 }
 
-function buildLedges(root,mats){
+export function buildLedges(root,mats,{runs=LEDGE_RUNS,x0=-20,z0=Z0}={}){
   const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
   const earthTex=makeEarthTextures(),turfTex=makeTurfTextures();
 
@@ -259,8 +259,8 @@ function buildLedges(root,mats){
   const tuftLight=mats.bladeLight.clone();tuftLight.name='route-1-ledge-tufts-light';tuftLight.color.set('#91bf58');tuftLight.side=THREE.DoubleSide;tuftLight.userData.route1LedgeMaterial=true;
   const tuftGeos=[makeTuftGeometry(1601),makeTuftGeometry(1602),makeTuftGeometry(1603)];
 
-  LEDGE_RUNS.forEach(([r,c0,c1],index)=>{
-    const width=(c1-c0+1)*2,left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.10;
+  runs.forEach(([r,c0,c1],index)=>{
+    const width=(c1-c0+1)*2,left=x0+c0*2,right=x0+(c1+1)*2,x=(left+right)/2,z=z0+r*2+.10;
     const seed=11000+r*53+c0*37+index,geo=makeLedgeGeometry(width,seed);
 
     const soil=new THREE.Mesh(geo.earth,earth);soil.name='route-1-ledged-soil';soil.position.set(x,0,z);soil.castShadow=true;soil.receiveShadow=true;group.add(soil);

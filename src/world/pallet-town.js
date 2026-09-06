@@ -5,6 +5,7 @@ import { makeMaterials } from './materials.js';
 import { PALLET_TOWN, tileToWorld } from './layout.js';
 import { createBuilding } from './buildings.js';
 import { makeLandscape, makeTrees, makeGardensAndGrass, makeSky } from './landscape.js';
+import { createViridianCity } from './viridian-city.js';
 import { makeRoute1 } from './route1.js';
 import { upgradeRoute1Ledges } from './route1-ledges.js';
 import { prunePalletRouteBackdrop } from './route1-prune.js';
@@ -31,6 +32,7 @@ export function createPalletTown(scene) {
   prunePalletRouteBackdrop(scene,colliders);
   const route1=makeRoute1(scene,mats,colliders);
   upgradeRoute1Ledges(route1.root,mats);
+  const viridian=createViridianCity(scene,mats,colliders);
   const buildings=new Map();
   for(const spec of PALLET_TOWN.buildings) {
     const group=createBuilding(spec,mats);collapseBuilding(group);scene.add(group);buildings.set(spec.id,group);
@@ -47,7 +49,7 @@ export function createPalletTown(scene) {
   }
   addResidents(scene,mats,colliders);
   // Walkable town bounds: use the visible tree line and water bank as the limits.
-  colliders.push({kind:'box',id:'western-border',minX:-100,maxX:-18.25,minZ:-100,maxZ:100});
+  colliders.push({kind:'box',id:'western-border',minX:-100,maxX:-18.25,minZ:-17.2,maxZ:100});
   colliders.push({kind:'box',id:'eastern-border',minX:18.25,maxX:100,minZ:-17.15,maxZ:100});
   colliders.push({kind:'box',id:'southern-border',minX:-100,maxX:100,minZ:16.05,maxZ:100});
   // Once north of the Pallet tree line Route 1 takes over the world bounds. These
@@ -55,7 +57,7 @@ export function createPalletTown(scene) {
   colliders.push({kind:'box',id:'northern-border-west',minX:-100,maxX:-2.0,minZ:-17.2,maxZ:-15.35});
   colliders.push({kind:'box',id:'northern-border-east',minX:2.0,maxX:100,minZ:-17.2,maxZ:-15.35});
   colliders.push({kind:'box',id:'water',minX:-12.3,maxX:-3.7,minZ:9.95,maxZ:100});
-  return {layout:PALLET_TOWN,colliders,buildings,route1,sun,materials:mats,update:landscape.update};
+  return {layout:PALLET_TOWN,colliders,buildings,route1,viridian,sun,materials:mats,update:landscape.update,lightRegion:'pallet'};
 }
 
 // The original Pallet-only scene placed its fake mountain horizon just 70–95 m
@@ -65,13 +67,13 @@ export function createPalletTown(scene) {
 function extendDistantHorizon(root) {
   const hills=root?.getObjectByName('sky-and-distant-hills:mountain');
   if(!hills)return;
-  hills.scale.setScalar(2.4);
+  hills.scale.setScalar(4.2);
   hills.renderOrder=-5;
   hills.material=hills.material.clone();
   hills.material.depthWrite=false;
 }
 
-function createSign(spec,mats) {
+export function createSign(spec,mats) {
   const group=new THREE.Group();group.name=spec.id;const b=new Builder(group,mats);
   const w=spec.width,h=.70;
   for(const x of [-w*.32,w*.32]) {b.box(.10,1.30,.11,x,.65,0,'wood');b.box(.16,.06,.17,x,.04,0,'stoneDark');}
@@ -93,7 +95,7 @@ function createSign(spec,mats) {
   return group;
 }
 
-function collapseBuilding(root) {
+export function collapseBuilding(root) {
   root.updateMatrixWorld(true);
   const inverse=new THREE.Matrix4().copy(root.matrixWorld).invert(),buckets=new Map(),remove=[];
   root.traverse(obj=> {

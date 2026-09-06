@@ -4,9 +4,10 @@ import { WorldSpaces, DoorwayTransition } from './world/spaces.js';
 import { Locomotion } from './xr/locomotion.js';
 import { setupHands } from './xr/hands.js';
 
-const BUILD='PALLET 02 · INTERIORS · 2026.09.06';
+const BUILD='KANTO 03 · VIRIDIAN CITY · 2026.09.06';
 const canvas=document.querySelector('#world'),intro=document.querySelector('#intro'),walkButton=document.querySelector('#walk-button'),vrButton=document.querySelector('#vr-button'),menuButton=document.querySelector('#menu-button');
 const params=new URLSearchParams(location.search),touch=matchMedia('(pointer:coarse)').matches;
+const startInViridian=params.get('start')==='viridian';
 let renderer;
 try {
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
@@ -27,11 +28,12 @@ rig.name='player-rig';camera.name='player-head';rig.add(camera);scene.add(rig);
 const spaces=new WorldSpaces(scene,{onChange:()=>{renderer.shadowMap.needsUpdate=true;}}),town=spaces.town;
 const transition=new DoorwayTransition(camera);
 const clock=new THREE.Clock();let elapsed=0,mode='overview',toastTimer,statsTime=0,lastBoundary=0,session=null,returnPose=null;
-const overviewPosition=new THREE.Vector3(-30,24,34),overviewTarget=new THREE.Vector3(0,0,-1.5);
+const overviewPosition=startInViridian?new THREE.Vector3(-45,48,-66):new THREE.Vector3(-30,24,34),overviewTarget=startInViridian?new THREE.Vector3(1,0,-129):new THREE.Vector3(0,0,-1.5);
+if(startInViridian){document.querySelector('h1').innerHTML='Viridian City<span class="title-period">.</span>';document.querySelector('.subtitle').textContent='The Eternally Green Paradise.';}
 function toast(text) {const el=document.querySelector('#toast');el.textContent=text;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),3500);}
 const locomotion=new Locomotion({renderer,camera,rig,colliders:town.colliders,navigation:spaces.current.navigation,canvas,onBoundary:id=> {
   if(elapsed-lastBoundary<5)return;
-  if(id==='route-1-boundary'){toast('Route 1 comes later. For now, enjoy Pallet Town.');lastBoundary=elapsed;}
+  if(id==='route-2-boundary'||id==='route-22-boundary'){toast(id==='route-2-boundary'?'Route 2 — beyond this point comes later.':'Route 22 — beyond this point comes later.');lastBoundary=elapsed;}
   if(id==='water'){toast('The water’s edge — Route 21 comes later.');lastBoundary=elapsed;}
 }});
 function activateSpace(id) {
@@ -43,7 +45,7 @@ function overview() {
   transition.cancel();activateSpace('pallet-town');locomotion.floorHeight=0;
   mode='overview';locomotion.walking=false;locomotion.clearInput();rig.position.set(0,0,0);rig.rotation.set(0,0,0);
   const portrait=innerHeight>innerWidth;
-  camera.fov=portrait?64:54;camera.position.copy(overviewPosition);if(portrait)camera.position.set(-32,31,43);
+  camera.fov=portrait?64:54;camera.position.copy(overviewPosition);if(portrait)camera.position.set(...(startInViridian?[-52,62,-46]:[-32,31,43]));
   camera.lookAt(overviewTarget);camera.updateProjectionMatrix();
   document.body.classList.remove('walking');intro.hidden=false;menuButton.hidden=true;
   document.querySelector('#walk-hud').hidden=true;document.querySelector('#touch-controls').hidden=true;
@@ -51,7 +53,7 @@ function overview() {
 function walk(lock=true) {
   transition.cancel();activateSpace('pallet-town');
   mode='walk';locomotion.walking=true;
-  camera.fov=72;camera.updateProjectionMatrix();locomotion.spawn(town.layout.spawns.start);
+  camera.fov=72;camera.updateProjectionMatrix();locomotion.spawn(startInViridian?town.viridian.layout.spawn:town.layout.spawns.start);
   document.body.classList.add('walking');intro.hidden=true;menuButton.hidden=false;
   document.querySelector('#walk-hud').hidden=false;document.querySelector('#touch-controls').hidden=!touch;
   if(lock&&!touch&&canvas.requestPointerLock)canvas.requestPointerLock()?.catch?.(()=>toast('Click the scene to look around.'));
@@ -76,7 +78,7 @@ async function checkVR() {
       session=xrSession;
       await renderer.xr.setSession(xrSession);
       transition.cancel();activateSpace('pallet-town');
-      locomotion.spawn(town.layout.spawns.start,true);locomotion.walking=true;
+      locomotion.spawn((startInViridian||params.get('view')?.startsWith('viridian'))?town.viridian.layout.spawn:town.layout.spawns.start,true);locomotion.walking=true;
       renderer.xr.setFoveation(.7);
       const rates=xrSession.supportedFrameRates;if(rates&&[...rates].includes(72))try{await xrSession.updateTargetFrameRate(72);}catch{}
     } catch(error) {
@@ -120,6 +122,11 @@ const indoorViews={
 if(indoorViews[params.get('view')]){
   const view=indoorViews[params.get('view')];walk(false);activateSpace(view.space);locomotion.spawn(view);
 }
+if(params.get('view')==='viridian'){walk(false);locomotion.spawn({x:2,z:-99,yaw:0});}
+if(params.get('view')==='viridian-gym'){walk(false);locomotion.spawn({x:15,z:-139,yaw:-.65});}
+if(params.get('view')==='viridian-mart'){walk(false);locomotion.spawn({x:14,z:-118,yaw:-.75});}
+if(params.get('view')==='viridian-overview'){camera.position.set(-45,48,-66);camera.lookAt(1,0,-129);camera.fov=57;camera.updateProjectionMatrix();}
+if(params.get('view')==='viridian-map'){camera.position.set(0,95,-125);camera.lookAt(0,0,-125.01);camera.fov=48;camera.updateProjectionMatrix();}
 if(params.get('view')==='map') {
   camera.position.set(0,62,.01);camera.lookAt(0,0,0);camera.fov=40;camera.updateProjectionMatrix();
 }
@@ -142,6 +149,18 @@ renderer.setAnimationLoop(()=> {
     if(door)transition.begin(()=>{activateSpace(door.id);locomotion.relocate(door.arrival);});
   }
   spaces.update(elapsed);
+  if(spaces.active==='pallet-town'){
+    const z=renderer.xr.isPresenting||mode==='walk'?rig.position.z:(startInViridian||params.get('view')?.startsWith('viridian'))?-127:camera.position.z;
+    const region=z< -85?'viridian':z< -27?'route':'pallet';
+    const locationName=region==='viridian'?'VIRIDIAN CITY':region==='route'?'ROUTE 1':'PALLET TOWN';
+    const locationLabel=document.querySelector('#location-name');if(locationLabel.textContent!==locationName)locationLabel.textContent=locationName;
+    if(town.lightRegion!==region){
+      town.lightRegion=region;const centerZ=region==='viridian'?-127:region==='route'?-55:0;
+      town.sun.position.set(-25,55,centerZ+26);town.sun.target.position.set(0,0,centerZ);
+      Object.assign(town.sun.shadow.camera,{left:-49,right:49,top:49,bottom:-49,near:1,far:150});
+      town.sun.shadow.camera.updateProjectionMatrix();renderer.shadowMap.needsUpdate=true;
+    }
+  }
   renderer.render(scene,camera);
   // Architecture and lighting are static. Keep the shadow atlas rather than
   // re-rendering every tree and tile for every frame or every eye.
