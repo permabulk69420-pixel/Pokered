@@ -3,6 +3,7 @@ import './style.css';
 import { WorldSpaces, DoorwayTransition } from './world/spaces.js';
 import { Locomotion } from './xr/locomotion.js';
 import { setupHands } from './xr/hands.js';
+import { setupPokeball } from './xr/pokeball.js';
 
 const BUILD='KANTO 03 · VIRIDIAN CITY · 2026.09.06';
 const canvas=document.querySelector('#world'),intro=document.querySelector('#intro'),walkButton=document.querySelector('#walk-button'),vrButton=document.querySelector('#vr-button'),menuButton=document.querySelector('#menu-button');
@@ -51,7 +52,7 @@ function updateOutdoorVisibility(z){
   return changed;
 }
 const transition=new DoorwayTransition(camera);
-const clock=new THREE.Clock();let elapsed=0,mode='overview',toastTimer,statsTime=0,lastBoundary=0,session=null,returnPose=null,handSystem=null;
+const clock=new THREE.Clock();let elapsed=0,mode='overview',toastTimer,statsTime=0,lastBoundary=0,session=null,returnPose=null,handSystem=null,pokeballSystem=null;
 const overviewPosition=startInViridian?new THREE.Vector3(-45,48,-66):new THREE.Vector3(-30,24,34),overviewTarget=startInViridian?new THREE.Vector3(1,0,-129):new THREE.Vector3(0,0,-1.5);
 if(startInViridian){document.querySelector('h1').innerHTML='Viridian City<span class="title-period">.</span>';document.querySelector('.subtitle').textContent='The Eternally Green Paradise.';}
 function toast(text) {const el=document.querySelector('#toast');el.textContent=text;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),3500);}
@@ -115,13 +116,17 @@ renderer.xr.addEventListener('sessionstart',()=> {
   document.exitPointerLock?.();document.body.classList.add('xr');locomotion.clearInput();
 });
 renderer.xr.addEventListener('sessionend',()=> {
-  session=null;document.body.classList.remove('xr');vrButton.disabled=false;locomotion.needsXRSpawn=null;
+  session=null;document.body.classList.remove('xr');vrButton.disabled=false;locomotion.needsXRSpawn=null;pokeballSystem?.reset();
   // Restore a clean desktop camera; XR's final tracked height must not leak out.
   if(returnPose?.mode==='walk'){
     walk(false);activateSpace(returnPose.space);rig.position.copy(returnPose.position);locomotion.floorHeight=returnPose.floorHeight;locomotion.yaw=returnPose.yaw;locomotion.pitch=returnPose.pitch;rig.rotation.y=locomotion.yaw;camera.rotation.x=locomotion.pitch;
   }else overview();
 });
-setupHands(renderer,rig).then(system=>{handSystem=system;}).catch(error=>console.warn('Hands setup:',error));
+setupHands(renderer,rig).then(async system=>{
+  handSystem=system;
+  try {pokeballSystem=await setupPokeball({renderer,rig,states:system.states});}
+  catch(error){console.warn('Poké Ball setup:',error);}
+}).catch(error=>console.warn('Hands setup:',error));
 
 window.addEventListener('resize',()=> {
   if(renderer.xr.isPresenting)return;
@@ -161,11 +166,12 @@ if(params.has('clean')) {
 // Read-only diagnostic snapshot is useful when checking a Quest build remotely.
 // There is no gameplay state or saved progression in this visual slice.
 const diagnostic={build:BUILD,ready:false,mode,renderer:'WebGL2',staticShadows:true};
-Object.defineProperty(window,'PALLET_DIAGNOSTICS',{get:()=>Object.freeze({...diagnostic,mode,space:spaces.active,floorHeight:locomotion.floorHeight,transition:transition.state,xr:renderer.xr.isPresenting,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,player:rig.position.toArray(),yaw:rig.rotation.y})});
+Object.defineProperty(window,'PALLET_DIAGNOSTICS',{get:()=>Object.freeze({...diagnostic,mode,space:spaces.active,floorHeight:locomotion.floorHeight,transition:transition.state,xr:renderer.xr.isPresenting,pokeball:pokeballSystem?.mode||'loading',drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,player:rig.position.toArray(),yaw:rig.rotation.y})});
 renderer.setAnimationLoop(()=> {
   const dt=Math.min(clock.getDelta(),.045);elapsed+=dt;
   if(renderer.xr.isPresenting){rig.updateMatrixWorld(true);renderer.xr.updateCamera(camera);}
   handSystem?.update(dt);
+  pokeballSystem?.update(dt);
   transition.update(dt);
   if(!transition.busy)locomotion.update(dt);
   if(!transition.busy&&!locomotion.needsXRSpawn&&(mode==='walk'||renderer.xr.isPresenting)){
@@ -192,7 +198,7 @@ renderer.setAnimationLoop(()=> {
   // re-rendering every tree and tile for every frame or every eye.
   if(renderer.shadowMap.autoUpdate)renderer.shadowMap.autoUpdate=false;
   if(!diagnostic.ready){diagnostic.ready=true;walkButton.disabled=false;walkButton.textContent='Walk around';document.body.dataset.ready='true';}
-  if(debug&&elapsed-statsTime>.5){statsTime=elapsed;document.querySelector('#stats').textContent=`${BUILD}\n${spaces.active} · floor ${locomotion.floorHeight.toFixed(2)} m\n${renderer.info.render.calls} draw calls · ${renderer.info.render.triangles.toLocaleString()} triangles\n${renderer.info.memory.geometries} geometries · ${renderer.info.memory.textures} textures\n${renderer.xr.isPresenting?'Immersive VR':'Desktop preview'} · static shadows`;}
+  if(debug&&elapsed-statsTime>.5){statsTime=elapsed;document.querySelector('#stats').textContent=`${BUILD}\n${spaces.active} · floor ${locomotion.floorHeight.toFixed(2)} m\n${renderer.info.render.calls} draw calls · ${renderer.info.render.triangles.toLocaleString()} triangles\n${renderer.info.memory.geometries} geometries · ${renderer.info.memory.textures} textures\n${renderer.xr.isPresenting?'Immersive VR':'Desktop preview'} · Poké Ball ${pokeballSystem?.mode||'loading'} · static shadows`;}
 });
 checkVR();
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();renderer.setAnimationLoop(null);toast('The graphics session was interrupted. Reload the page to resume.');});
