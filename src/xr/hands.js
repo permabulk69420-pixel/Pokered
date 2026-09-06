@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
-import { setupPokeball } from './pokeball.js';
 
 const DEFAULT_ROTATIONS=Object.freeze({
   left:Object.freeze([0,0,Math.PI/2]),
@@ -22,8 +21,6 @@ function setPose(animation,name,amount) {
   animation.current=action;action.weight=1;action.time=THREE.MathUtils.clamp(amount,0,1);
 }
 
-// Uses the rigged hands from dumbgame. The GLBs are copied into public/assets/hands/
-// by the Pages workflow if they are not already present in this repository.
 export async function setupHands(renderer,rig) {
   const controllers=[renderer.xr.getController(0),renderer.xr.getController(1)];
   const grips=[renderer.xr.getControllerGrip(0),renderer.xr.getControllerGrip(1)];
@@ -46,13 +43,13 @@ export async function setupHands(renderer,rig) {
       new THREE.MeshStandardMaterial({color:'#fff4db',roughness:.7})
     );
     marker.rotation.x=Math.PI/2;marker.name='temporary-grip-marker';marker.visible=false;grip.add(marker);
-    return {controller,grip,marker,inputSource:null,handedness:'',anchor:null,root:null,animation:null,generation:0};
+    return {controller,grip,marker,inputSource:null,handedness:'',anchor:null,root:null,animation:null,generation:0,poseOverride:null};
   });
 
   function detach(state) {
     state.generation++;
     if(state.anchor)state.grip.remove(state.anchor);
-    state.anchor=null;state.root=null;state.animation=null;
+    state.anchor=null;state.root=null;state.animation=null;state.poseOverride=null;
     state.marker.visible=false;
   }
 
@@ -86,15 +83,12 @@ export async function setupHands(renderer,rig) {
     state.controller.addEventListener('disconnected',()=>{state.inputSource=null;state.handedness='';detach(state);});
   }
 
-  let pokeball=null;
-  try {pokeball=await setupPokeball({rig,states});}
-  catch(error){console.warn('Poké Ball setup:',error);}
-
   function update(dt) {
     for(const state of states) {
       if(!state.animation)continue;
       const gamepad=state.inputSource?.gamepad,trigger=gamepad?.buttons?.[0]?.value??0,squeeze=gamepad?.buttons?.[1]?.value??0;
-      if(squeeze>.08&&trigger>.08)setPose(state.animation,'Fist',Math.max(trigger,squeeze));
+      if(state.poseOverride)setPose(state.animation,state.poseOverride.name,state.poseOverride.amount);
+      else if(squeeze>.08&&trigger>.08)setPose(state.animation,'Fist',Math.max(trigger,squeeze));
       else if(squeeze>.08)setPose(state.animation,'Grip',squeeze);
       else if(trigger>.08)setPose(state.animation,'Pinch',trigger);
       else setPose(state.animation,'Open',0);
@@ -102,8 +96,7 @@ export async function setupHands(renderer,rig) {
       // to evaluate every XR frame for the bones to follow the analog controls.
       state.animation.mixer.update(dt);
     }
-    pokeball?.update(dt);
   }
 
-  return {controllers,grips,states,pokeball,update};
+  return {controllers,grips,states,update};
 }
