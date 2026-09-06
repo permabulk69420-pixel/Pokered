@@ -122,41 +122,40 @@ function flowers(root,mats){
 }
 
 function ledgeBankGeometry(width){
-  // Side profile: low back shoulder, flat grassy crown, then a sloped rock/earth face.
-  // Extrusion gives the ledge an actual terrain profile rather than a rectangular box.
+  // Deliberately simple, chunky terrain: mostly vertical dirt face with just
+  // enough taper/bevel that it does not read as a raw primitive box in VR.
   const profile=new THREE.Shape();
-  profile.moveTo(-.44,.025);
-  profile.lineTo(-.34,.36);
-  profile.quadraticCurveTo(-.10,.41,.14,.38);
-  profile.quadraticCurveTo(.34,.31,.52,.025);
-  profile.lineTo(-.44,.025);
-  const g=new THREE.ExtrudeGeometry(profile,{depth:Math.max(.5,width-.12),steps:1,bevelEnabled:true,bevelSegments:1,bevelSize:.055,bevelThickness:.045,curveSegments:3});
+  profile.moveTo(-.42,.025);
+  profile.lineTo(-.42,.29);
+  profile.lineTo(.38,.29);
+  profile.lineTo(.44,.025);
+  profile.closePath();
+  const g=new THREE.ExtrudeGeometry(profile,{
+    depth:Math.max(.5,width-.08),steps:1,
+    bevelEnabled:true,bevelSegments:1,bevelSize:.025,bevelThickness:.02,curveSegments:1,
+  });
   // Shape x=>world z, shape y=>world y, extrusion z=>world x.
-  g.rotateY(Math.PI/2);g.translate(-width/2+.06,0,0);g.computeVertexNormals();return g;
+  g.rotateY(Math.PI/2);g.translate(-width/2+.04,0,0);g.computeVertexNormals();return g;
 }
 
 function ledges(root,mats){
   const group=new THREE.Group();group.name='route-1-ledges';root.add(group);
-  const rand=seededRandom(418),rocksDark=[],rocksLight=[];
   for(const [r,c0,c1] of LEDGE_RUNS){
     const width=(c1-c0+1)*2,left=-20+c0*2,right=-20+(c1+1)*2,x=(left+right)/2,z=Z0+r*2+.70;
-    const bank=new THREE.Mesh(ledgeBankGeometry(width),mats.soil);bank.name='route-1-shaped-ledge-bank';bank.position.set(x,0,z);bank.castShadow=true;bank.receiveShadow=true;group.add(bank);
 
-    // Grass cap follows the crown but is only a thin surface, not another box.
-    const cap=new THREE.Mesh(new THREE.PlaneGeometry(Math.max(.45,width-.22),.44),mats.edge);cap.name='route-1-ledge-grass-cap';cap.rotation.x=-Math.PI/2;cap.position.set(x,.405,z-.07);cap.receiveShadow=true;group.add(cap);
+    const bank=new THREE.Mesh(ledgeBankGeometry(width),mats.soil);
+    bank.name='route-1-dirt-ledge';bank.position.set(x,0,z);bank.castShadow=true;bank.receiveShadow=true;group.add(bank);
 
-    // Low-poly stones embedded into the sloping face give the bank the chunky
-    // Gen-I ledge read without the previous green peg decoration.
-    const count=Math.max(1,Math.floor(width/1.05));
-    for(let i=0;i<count;i++){
-      const xx=x-width/2+.48+(i+.25+rand()*.5)*(width-.96)/count;
-      const arr=rand()>.36?rocksDark:rocksLight;
-      arr.push({position:[xx,.13+rand()*.09,z+.36+rand()*.055],scale:[1.25+rand()*.45,.62+rand()*.28,.48+rand()*.22],rotation:[rand()*.3,rand()*Math.PI,rand()*.2]});
-    }
+    // Bright grass slab on top: deliberately readable and blocky, like a tiny
+    // Minecraft-style grass bank rather than a rock wall or decorative prop.
+    const cap=new THREE.Mesh(new THREE.BoxGeometry(width+.08,.085,.82),mats.grass);
+    cap.name='route-1-grass-cap';cap.position.set(x,.325,z-.015);cap.castShadow=false;cap.receiveShadow=true;group.add(cap);
+
+    // A darker green front rim makes the grass layer read from standing eye
+    // height without adding pegs, stones, blades, or other visual clutter.
+    const rim=new THREE.Mesh(new THREE.BoxGeometry(width+.04,.075,.055),mats.grassShade);
+    rim.name='route-1-grass-front-rim';rim.position.set(x,.285,z+.405);rim.castShadow=false;group.add(rim);
   }
-  const rockGeo=new THREE.IcosahedronGeometry(.25,0);
-  group.add(instanceSet(rockGeo,mats.stoneDark,rocksDark,'route-1-ledge-rocks-dark',false));
-  group.add(instanceSet(rockGeo,mats.stone,rocksLight,'route-1-ledge-rocks-light',false));
 }
 
 export function makeRoute1(scene,mats,colliders){
